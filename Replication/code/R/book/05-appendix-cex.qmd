@@ -1,0 +1,75 @@
+---
+title: "Appendix: CEX (A15, A16)"
+---
+
+```{r}
+library(data.table)
+library(haven)
+library(fixest)
+library(knitr)
+
+dir.create("../../../Tables/r", recursive = TRUE, showWarnings = FALSE)
+
+save_models <- function(models, keep, stem, caption = stem) {
+  tab <- as.data.table(etable(models, keep = keep, tex = FALSE, digits = 3))
+  fwrite(tab, sprintf("../../../Tables/r/%s.csv", stem))
+  etable(models, keep = keep, tex = TRUE, digits = 3, file = sprintf("../../../Tables/r/%s.tex", stem))
+  knitr::kable(tab, caption = caption, format = "html", digits = 3)
+}
+
+d <- as.data.table(read_dta("../../../data/CEX/CEX_1980_2012.dta"))
+gq <- as.data.table(read_dta("../../../data/CEX/generated_quarters_lag.dta"))
+ueq <- as.data.table(read_dta("../../../raw/unemployment_raw_q.dta"))
+
+d[, tsdate := survey_year + (wave - 1) / 4]
+setnames(d, "survey_year", "panel_year")
+setnames(d, "wave", "panel_q")
+d <- d[total_income >= 2000]
+d[, `:=`(birth_year = panel_year - hh_age, birth_q = 1L)]
+d[, panel_year_old := panel_year]
+d[, panel_year := panel_year_old - 1L]
+
+d <- merge(d, gq[, .(panel_year, panel_q, birth_year, birth_q, experience_lambda1_lag)], by = c("panel_year", "panel_q", "birth_year", "birth_q"), all.x = TRUE)
+d <- merge(d, ueq, by = c("panel_year", "panel_q"), all.x = TRUE)
+d[, panel_year := panel_year_old]
+
+d[, consum_durable := total_consumption - consumption_nondurables]
+d[, `:=`(
+  income = log(total_income),
+  consump = log(total_consumption),
+  consump_nd = log(consumption_nondurables),
+  consump_d = log(consum_durable),
+  female = as.integer(hh_sex == 2),
+  marry = as.integer(marital == 1),
+  yq = paste(panel_year, panel_q, sep = "_")
+)]
+```
+
+## この章でコードがしていること（1分で把握）
+
+| セクション | コードでしていること | 主な入力 | 主な出力 |
+|---|---|---|---|
+| A15 | CEXの基本統計（家計属性・消費・所得・経験）を作る | `CEX_1980_2012.dta` など | `table_A15_r.csv` |
+| A16 | 経験変数と消費（総/耐久/非耐久）の回帰を推定する | 前処理済み `d` | `table_A16_r.csv`, `table_A16_r.tex` |
+
+## A15 (Summary)
+
+```{r}
+vars <- c("hh_age", "family_size", "total_consumption", "consum_durable", "consumption_nondurables", "total_income", "experience_lambda1_lag")
+summ <- rbindlist(lapply(vars, function(v) {
+  x <- d[[v]]
+  data.table(variable = v, mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE), p10 = quantile(x, 0.1, na.rm = TRUE), p50 = quantile(x, 0.5, na.rm = TRUE), p90 = quantile(x, 0.9, na.rm = TRUE), N = sum(!is.na(x)))
+}))
+fwrite(summ, "../../../Tables/r/table_A15_r.csv")
+knitr::kable(summ, caption = "Table A15 (R): Summary Statistics (CEX)", format = "html", digits = 3)
+```
+
+## A16 (Regressions)
+
+```{r}
+rhs <- "experience_lambda1_lag + Civilianunemploymentrate + income + i(hh_age) + marry + female + i(school) + i(hh_race) + family_size + unemp + i(region)"
+m1 <- feols(as.formula(sprintf("consump ~ %s | yq", rhs)), d, vcov = ~birth_year, weights = ~weight)
+m2 <- feols(as.formula(sprintf("consump_d ~ %s | yq", rhs)), d, vcov = ~birth_year, weights = ~weight)
+m3 <- feols(as.formula(sprintf("consump_nd ~ %s | yq", rhs)), d, vcov = ~birth_year, weights = ~weight)
+save_models(list(m1, m2, m3), keep = "experience_lambda1_lag", stem = "table_A16_r", caption = "Table A16 (R): CEX Consumption Regressions")
+```

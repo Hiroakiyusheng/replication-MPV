@@ -1,0 +1,427 @@
+clear
+set more off
+
+cd "../../raw/CEX"
+
+local i=80
+while `i' < 82 {
+	
+	local year = 19`i'
+	local YY 	= `year'-2000
+			
+	cd ./`year'
+
+	local j=1	
+	while `j' < 5 {
+		#delimit;
+		use fmlyq`i'`j'.dta,clear;
+		gen intno=round(((NEWID/10)-int(NEWID/10))*10); 
+		replace NEWID=(NEWID-intno)/10;
+		keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+				COMPSECX CUREMPL1 CUREMPL2 CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+				FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+				JOTAXNET MARITAL1 MISCTAXX MONYOWDX OTHRFNDX PERSLT18 PERSOT64 POCC_REF 
+				PROPVALX PTAXRFDX QCURRIN1 QINTRVMO QINTRVYR RACE2 REF_RACE REGION RESPSTAT  
+				SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+				FSSIX UNEMPLX COMPENSX WELFAREX UNEMPLX FINLWT21;
+			ren POCC_REF OCCUP;
+			ren QCURRIN1 INDUS;
+			gen RENTEQVX=99999999 if CUTENURE=="1"|CUTENURE=="2";
+			drop PROPVALX;
+			#delimit cr
+		save "../../../data/CEX/famyq`i'`j'",replace
+		local j=`j'+1
+		
+    }
+	local i=`i'+1
+	cd ..
+}
+
+local i=82
+while `i' < 84 {
+
+	local year = 19`i'
+	local YY 	= `year'-2000
+			
+	cd ./`year'
+
+	local j=1	
+	while `j' < 5 {
+		#delimit;
+		use fmlyq`i'`j'.dta,clear;
+		gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+		replace NEWID=(NEWID-intno)/10;
+		keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+				COMPSECX CUREMPL1 CUREMPL2 CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+				FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+				JOTAXNET MARITAL1 MISCTAXX MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCUPRE1 
+					   PTAXRFDX QPREVIN1 QINTRVMO QINTRVYR RACE2 REF_RACE REGION RENTEQVX RESPSTAT  
+				SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+				FSSIX UNEMPLX COMPENSX WELFAREX UNEMPLX FINLWT21;
+		ren OCCUPRE1 OCCUP;
+		ren QPREVIN1 INDUS;
+		#delimit cr
+	save "../../../data/CEX/famyq`i'`j'",replace
+	local j=`j'+1
+	}
+	local i=`i'+1
+	cd ..
+}
+
+local i=84
+while `i' < 85 {
+
+	local year = 19`i'
+	local YY 	= `year'-2000
+			
+	cd ./`year'
+
+	local j=1	
+	while `j' < 5 {
+		#delimit;
+		use fmlyq`i'`j'.dta,clear;
+		gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+		replace NEWID=(NEWID-intno)/10;
+		keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+				COMPSECX CUREMPL1 CUREMPL2 CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+				FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+				JOTAXNET MARITAL1          MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCUPRE1 
+					   PTAXRFDX QPREVIN1 QINTRVMO QINTRVYR RACE2 REF_RACE REGION RENTEQVX RESPSTAT  
+				SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+				FSSIX UNEMPLX COMPENSX WELFAREX UNEMPLX FINLWT21;
+		ren OCCUPRE1 OCCUP;
+		ren QPREVIN1 INDUS;
+		#delimit cr
+	save "../../../data/CEX/famyq`i'`j'",replace
+	local j=`j'+1
+	}
+	local i=`i'+1
+	cd ..
+}
+
+
+
+local i=85
+while `i' < 86 {
+	
+	local year = 19`i'
+	local YY 	= `year'-2000
+	
+	cd ./`year'
+	
+	local j=1	
+	while `j' < 5 {
+		#delimit;
+		u fmlyq`i'`j'.dta,clear;
+		gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+		replace NEWID=(NEWID-intno)/10;
+		keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+				COMPSECX CUREMPL1 CUREMPL2 CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+				FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+				JOTAXNET MARITAL1          MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCUPRE1 
+					   PTAXRFDX QPREVIN1 QINTRVMO QINTRVYR RACE2 REF_RACE REGION RENTEQVX RESPSTAT  
+				SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+				FSSIX UNEMPLX COMPENSX WELFAREX JFDSTMPA UNEMPLX FINLWT21;
+		ren OCCUPRE1 OCCUP;
+		ren QPREVIN1 INDUS;
+	
+		#delimit cr
+		save "../../../data/CEX/famyq`i'`j'",replace
+    	local j=`j'+1
+    }
+	local i=`i'+1
+	cd ..
+}
+
+local i=86
+while `i' < 88 {
+
+	local year = 19`i'
+	local YY 	= `year'-2000
+	
+	cd ./`year'
+
+	local j=1	
+	while `j' < 5 {
+		#delimit;
+		u fmlyq`i'`j'.dta,clear;
+		gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+		replace NEWID=(NEWID-intno)/10;
+		keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+				COMPSECX CUREMPL1 CUREMPL2 CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+				FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+				JOTAXNET MARITAL1         MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCUPRE1 
+					   PTAXRFDX QPREVIN1 QINTRVMO QINTRVYR RACE2 REF_RACE REGION RENTEQVX RESPSTAT  
+				SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+				FSSIX UNEMPLX COMPENSX WELFAREX JFDSTMPA UNEMPLX FINLWT21;
+		ren OCCUPRE1 OCCUP;
+		ren QPREVIN1 INDUS;
+		#delimit cr
+		save "../../../data/CEX/famyq`i'`j'",replace
+        
+        local j=`j'+1
+            }
+    local i=`i'+1
+    cd ..
+}
+
+
+
+local i=88
+while `i' < 93 {
+
+	local year = 19`i'
+	local YY 	= `year'-2000
+	
+	cd ./`year'
+
+	local j=1	
+	while `j' < 5 {
+		#delimit;
+		u fmlyq`i'`j'.dta,clear;
+		gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+		replace NEWID=(NEWID-intno)/10;
+		keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+				COMPSECX CUREMPL1 CUREMPL2 CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+				FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+				         MARITAL1 MISCTAXX MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCUPRE1 
+					   PTAXRFDX QPREVIN1 QINTRVMO QINTRVYR RACE2 REF_RACE REGION RENTEQVX RESPSTAT  
+				SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+				FSSIX UNEMPLX COMPENSX WELFAREX JFDSTMPA UNEMPLX FINLWT21;
+		ren OCCUPRE1 OCCUP;
+		ren QPREVIN1 INDUS;
+		#delimit cr
+		save "../../../data/CEX/famyq`i'`j'",replace
+        local j=`j'+1
+            }
+	local i=`i'+1
+	cd ..
+}
+
+
+local i=93
+while `i' < 94 {
+   
+   	local year = 19`i'
+	local YY 	= `year'-2000
+	
+	cd ./`year'
+   
+	local j=1	
+	while `j' < 3 {
+		#delimit;
+		u fmlyq`i'`j'.dta,clear;
+		gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+		replace NEWID=(NEWID-intno)/10;
+		keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+				COMPSECX CUREMPL1 CUREMPL2 CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+				FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+				         MARITAL1 MISCTAXX MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCUPRE1 
+					   PTAXRFDX          QINTRVMO QINTRVYR RACE2 REF_RACE REGION RENTEQVX RESPSTAT  
+				SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+				FSSIX UNEMPLX COMPENSX WELFAREX JFDSTMPA UNEMPLX FINLWT21;
+		ren OCCUPRE1 OCCUP;
+		#delimit cr
+		save "../../../data/CEX/famyq`i'`j'",replace
+    	local j=`j'+1
+	}
+    local i=`i'+1
+    cd ..
+}
+
+
+local i=93
+while `i' < 94 {
+
+	local year = 19`i'
+	local YY 	= `year'-2000
+	
+	cd ./`year'
+   
+	local j=3	
+	while `j' < 5 {
+		#delimit;
+			u fmlyq`i'`j'.dta,clear;
+			gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+			replace NEWID=(NEWID-intno)/10;
+			keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+					COMPSECX CUREMPL1 CUREMPL2 CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+					FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+					         MARITAL1 MISCTAXX MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCUPRE1 
+						   PTAXRFDX          QINTRVMO QINTRVYR RACE2 REF_RACE REGION          RESPSTAT  
+					SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+					FSSIX UNEMPLX COMPENSX WELFAREX JFDSTMPA UNEMPLX FINLWT21;
+			ren OCCUPRE1 OCCUP;
+			gen RENTEQVX=99999999 if CUTENURE=="1"|CUTENURE=="2";
+			#delimit cr
+	save "../../../data/CEX/famyq`i'`j'",replace
+    local j=`j'+1
+    }
+    local i=`i'+1
+    cd ..
+}
+
+
+local i=94
+while `i' < 95 {
+
+	local year = 19`i'
+	local YY 	= `year'-2000
+	
+	cd ./`year'
+  
+	local j=1	
+	while `j' < 5 {
+		#delimit;	
+		u fmlyq`i'`j'.dta,clear;
+		gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+		replace NEWID=(NEWID-intno)/10;
+		keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+				COMPSECX                   CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+				FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+				         MARITAL1 MISCTAXX MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCUCOD1 
+					   PTAXRFDX          QINTRVMO QINTRVYR RACE2 REF_RACE REGION          RESPSTAT  
+				SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+				FSSIX UNEMPLX COMPENSX WELFAREX JFDSTMPA UNEMPLX FINLWT21;
+		ren OCCUCOD1 OCCUP;
+		gen RENTEQVX=99999999 if CUTENURE=="1"|CUTENURE=="2";
+		#delimit cr
+		save "../../../data/CEX/famyq`i'`j'",replace
+		local j=`j'+1
+	}
+    local i=`i'+1
+    cd ..
+}
+
+local i=95
+while `i' < 100 { 
+
+	local year = 19`i'
+	local YY 	= `year'-2000
+	
+	cd ./`year'
+	local j=1	
+	while `j' < 5 {
+
+		u fmlyq`i'`j'.dta,clear
+		
+		foreach v of varlist * { 
+			capture qui rename `v' `= upper("`v'")'
+		}
+		
+		#delimit;	
+		gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+		replace NEWID=(NEWID-intno)/10;
+		keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+				COMPSECX                   CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+				FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+				         MARITAL1 MISCTAXX MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCUCOD1 
+					   PTAXRFDX          QINTRVMO QINTRVYR RACE2 REF_RACE REGION RENTEQVX RESPSTAT  
+				SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+				FSSIX UNEMPLX COMPENSX WELFAREX JFDSTMPA UNEMPLX FINLWT21;
+		ren OCCUCOD1 OCCUP;
+		#delimit cr
+		save "../../../data/CEX/famyq`i'`j'",replace
+    local j=`j'+1
+	}
+	local i=`i'+1
+	cd ..
+}
+
+local i=100
+local year = 2000 
+	   
+	   while `i' < 113 {		   
+		   
+			local YY    = `year'-2000
+			local YY_p1 = `year'-1999
+			
+			cd ./`year'
+		   
+			local j=1	
+			while `j' < 5 {
+		   		   
+				capture u fmlyq`YY'`j'.dta,clear
+				capture u fmlyq0`YY'`j'.dta,clear
+	
+				foreach v of varlist * { 
+					qui rename `v' `= upper("`v'")'
+				}
+				
+				if (`YY'>=2 ) {
+					#delimit;	
+					gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+					replace NEWID=(NEWID-intno)/10;
+					capture ren UNEMPLXM UNEMPLX;
+					keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+							COMPSECX                   CUTENURE  FSALARY* EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFED* INTEARN* FININCX* 
+							FEDRFNDX FEDTAXX FINCAT*  FINCBT* FSLTAXX*  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+							         MARITAL1 MISCTAXX MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCU* 
+								   PTAXRFDX          QINTRVMO QINTRVYR RACE2 REF_RACE REGION RENTEQVX RESPSTAT   
+							SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPD* USBNDX
+							FSSIX* UNEMPLX* COMPENS* WELFARE* FOODSMP* UNEMPLX FINLWT21;
+					capture ren FOODSMPM FOODSMPX;
+					capture ren WELFAREM WELFAREX;
+					capture ren COMPENSM COMPENSX;
+					capture ren UNEMPLXM UNEMPLX;
+					capture ren FSSIXM 	 FSSIX;
+					capture ren TOTTXPDM TOTTXPDX;
+					capture ren FSLTAXXM FSLTAXX;
+					capture ren FINCATXM FINCATAX;
+					capture ren FINCBTXM FINCBTAX;
+					capture ren FININCXM FININCX;
+					capture ren INTEARNM INTEARNX;
+					capture ren FAMTFEDM FAMTFEDX;
+					capture ren FSALARYM EARNINCX;
+					capture ren FSALARYX EARNINCX;
+					capture ren OCCUCOD1 OCCUP;
+					capture ren FOODSMPX JFDSTMPA; 
+					#delimit cr
+				}
+				else {
+				capture ren FOODSMPX JFDSTMPA
+				capture ren UNEMPLXM UNEMPLX
+					#delimit;	
+					gen intno=round(((NEWID/10)-int(NEWID/10))*10);
+					replace NEWID=(NEWID-intno)/10;
+					keep  	NEWID intno AGE_REF AGE2 BLS_URBN CKBKACTX COMPBND COMPBNDX COMPCKGX COMPOWDX COMPSAVX BUILDING 
+							COMPSECX                   CUTENURE EARNINCX EDUC_REF EDUCA2 FAM_SIZE FAM_TYPE FAMTFEDX INTEARNX FININCX 
+							FEDRFNDX FEDTAXX FINCATAX FINCBTAX FSLTAXX  INC_HRS1 INC_HRS2 INCWEEK1 INCWEEK2 
+							         MARITAL1 MISCTAXX MONYOWDX OTHRFNDX PERSLT18 PERSOT64 OCCU* 
+								   PTAXRFDX          QINTRVMO QINTRVYR RACE2 REF_RACE REGION RENTEQVX RESPSTAT   
+							SAVACCTX COMPSEC SECESTX SEX_REF SEX2 SLOCTAXX SLRFUNDX TAXPROPX TOTTXPDX USBNDX
+							FSSIX UNEMPLX COMPENSX WELFAREX JFDSTMPA UNEMPLX FINLWT21;
+					capture ren OCCUCOD1 OCCUP;
+					#delimit cr
+				}
+				save  "../../../data/CEX/famyq`i'`j'",replace
+		   
+		   		local j=`j'+1     
+	     } 
+	       
+         local i=`i'+1
+         local year = `year'+1
+         display `i'
+         display `year'
+	 cd ..
+}
+
+*************MERGE MEMBER AND FAMILY FILES *************************************
+cd "../../data/CEX/"
+local i=80
+while `i' < 113 {
+	local j=1	
+	while `j' < 5 {
+		u famyq`i'`j'.dta,clear
+		sort NEWID intno
+		merge NEWID intno using mq`i'`j'
+		drop if _merge!=3
+		drop _merge
+		save,replace
+		erase mq`i'`j'.dta
+        local j=`j'+1
+     }
+     local i=`i'+1
+}
+
+

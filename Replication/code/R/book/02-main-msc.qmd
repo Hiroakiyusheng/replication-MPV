@@ -1,0 +1,57 @@
+---
+title: "Main: MSC (Table 3)"
+---
+
+```{r}
+library(data.table)
+library(haven)
+library(fixest)
+library(knitr)
+
+dir.create("../../../Tables/r", recursive = TRUE, showWarnings = FALSE)
+
+save_models <- function(models, keep, stem, caption = stem) {
+  tab <- as.data.table(etable(models, keep = keep, tex = FALSE, digits = 3))
+  fwrite(tab, sprintf("../../../Tables/r/%s.csv", stem))
+  etable(models, keep = keep, tex = TRUE, digits = 3, file = sprintf("../../../Tables/r/%s.tex", stem))
+  knitr::kable(tab, caption = caption, format = "html", digits = 3)
+}
+
+msc <- as.data.table(read_dta("../../../raw/MSC/ms_all_1953_2018.dta"))
+gyl <- as.data.table(read_dta("../../../data/MSC/generated_years_lag.dta"))
+ue <- as.data.table(read_dta("../../../raw/nat_UE_1890_2017.dta"))
+
+msc <- msc[, .(yyyy, yyyymm, age, ehsgrd, eclgrd, income, sex, marry, bexp, pexp, dur, unemp, wt)]
+msc[, year_born := yyyy - age]
+msc <- msc[age >= 18]
+msc <- merge(msc, gyl, by = c("yyyy", "year_born"), all.x = TRUE)
+msc <- merge(msc, ue, by = "yyyy", all.x = TRUE)
+msc[, married := fifelse(is.na(marry), 0, marry - 1)]
+msc[, female := fifelse(is.na(sex), 0, sex - 1)]
+msc[, ln_income := log(income)]
+msc[, pexp_dum := fifelse(pexp == 5, 0, fifelse(pexp == 3, 1, pexp))]
+msc[, dur_dum := fifelse(dur == 5, 0, fifelse(dur == 3, 1, dur))]
+```
+
+## この章でコードがしていること（1分で把握）
+
+| ステップ | コードでしていること | 主な入力 | 主な出力 |
+|---|---|---|---|
+| 1. 前処理 | MSC本体に出生コホート別経験変数と失業率を結合し、推定用変数を作る | `ms_all_1953_2018.dta`, `generated_years_lag.dta`, `nat_UE_1890_2017.dta` | 推定用 `msc` データ |
+| 2. 推定 | 期待・耐久財期待を被説明変数にした6本の回帰を推定する | 前処理済み `msc` | `table_3_r.csv`, `table_3_r.tex` |
+
+```{r}
+m1 <- feols(pexp_dum ~ experience_lambda1_lag + UE_rate + i(yyyy) + i(age), msc, vcov = "hetero", weights = ~wt)
+m2 <- feols(pexp_dum ~ experience_lambda1_lag + UE_rate + ln_income + i(yyyy) + i(age), msc, vcov = "hetero", weights = ~wt)
+m3 <- feols(pexp_dum ~ experience_lambda1_lag + UE_rate + ehsgrd + eclgrd + ln_income + female + married + i(yyyy) + i(age), msc, vcov = "hetero", weights = ~wt)
+m4 <- feols(dur_dum ~ experience_lambda1_lag + UE_rate + i(yyyy) + i(age), msc, vcov = "hetero", weights = ~wt)
+m5 <- feols(dur_dum ~ experience_lambda1_lag + UE_rate + ln_income + i(yyyy) + i(age), msc, vcov = "hetero", weights = ~wt)
+m6 <- feols(dur_dum ~ experience_lambda1_lag + UE_rate + ehsgrd + eclgrd + ln_income + female + married + i(yyyy) + i(age), msc, vcov = "hetero", weights = ~wt)
+
+save_models(
+  list(m1, m2, m3, m4, m5, m6),
+  keep = c("experience_lambda1_lag", "UE_rate", "ln_income"),
+  stem = "table_3_r",
+  caption = "Table 3 (R): Experience Effects and Expectations"
+)
+```

@@ -1,0 +1,427 @@
+---
+title: "Appendix: Nielsen (A13, A14, B17, B18, Figure B4)"
+---
+
+```{r}
+library(data.table)
+library(haven)
+library(fixest)
+library(ggplot2)
+library(knitr)
+
+dir.create("../../../Tables/r", recursive = TRUE, showWarnings = FALSE)
+dir.create("../../../Figures/r", recursive = TRUE, showWarnings = FALSE)
+
+first_existing <- function(paths) {
+  hit <- paths[file.exists(paths)]
+  if (length(hit) == 0) NA_character_ else hit[[1]]
+}
+
+find_panel_file <- function(base) {
+  first_existing(c(
+    sprintf("../../../data/Nielsen/%s.dta", base),
+    sprintf("../../../data/Nielsen/%s", base),
+    sprintf("../../../data/%s.dta", base),
+    sprintf("../../../data/%s", base)
+  ))
+}
+
+write_skip_note <- function(stem, msg) {
+  note_dt <- data.table(status = "skipped", reason = msg)
+  writeLines(msg, sprintf("../../../Tables/r/%s_note.txt", stem))
+  note_dt |>
+    fwrite(sprintf("../../../Tables/r/%s.csv", stem))
+  knitr::kable(note_dt, caption = sprintf("%s (skipped)", stem), format = "html", digits = 3)
+}
+
+summarize_vars <- function(d, vars) {
+  rbindlist(lapply(vars, function(v) {
+    x <- d[[v]]
+    data.table(
+      variable = v,
+      mean = mean(x, na.rm = TRUE),
+      sd = sd(x, na.rm = TRUE),
+      p10 = quantile(x, 0.10, na.rm = TRUE),
+      p50 = quantile(x, 0.50, na.rm = TRUE),
+      p90 = quantile(x, 0.90, na.rm = TRUE),
+      N = sum(!is.na(x))
+    )
+  }))
+}
+
+extract_fixest_terms <- function(m, keep, model_id) {
+  ct <- as.data.table(coeftable(m), keep.rownames = "term")
+  if ("Estimate" %in% names(ct)) setnames(ct, "Estimate", "estimate")
+  if ("Std. Error" %in% names(ct)) setnames(ct, "Std. Error", "std_error")
+  if ("t value" %in% names(ct)) setnames(ct, "t value", "stat")
+  if ("z value" %in% names(ct)) setnames(ct, "z value", "stat")
+  if ("Pr(>|t|)" %in% names(ct)) setnames(ct, "Pr(>|t|)", "p_value")
+  if ("Pr(>|z|)" %in% names(ct)) setnames(ct, "Pr(>|z|)", "p_value")
+  if (!("estimate" %in% names(ct))) ct[, estimate := NA_real_]
+  if (!("std_error" %in% names(ct))) ct[, std_error := NA_real_]
+  if (!("stat" %in% names(ct))) ct[, stat := NA_real_]
+  if (!("p_value" %in% names(ct))) ct[, p_value := NA_real_]
+  ct <- ct[term %in% keep, .(model = model_id, term, estimate, std_error, stat, p_value)]
+  ct
+}
+
+save_models <- function(models, keep, stem, caption = stem) {
+  tab <- rbindlist(lapply(seq_along(models), function(i) extract_fixest_terms(models[[i]], keep, paste0("M", i))), fill = TRUE)
+  tab[, term := factor(term, levels = keep)]
+  setorder(tab, term, model)
+  tab[, term := as.character(term)]
+  fwrite(tab, sprintf("../../../Tables/r/%s.csv", stem))
+  tex <- knitr::kable(tab, format = "latex", booktabs = TRUE, caption = caption, digits = 3)
+  writeLines(tex, sprintf("../../../Tables/r/%s.tex", stem))
+  knitr::kable(tab, caption = caption, format = "html", digits = 3)
+}
+
+add_controls <- function(d) {
+  x <- copy(d)
+  x[household_income > 27, household_income := 27]
+  x[, HH_income := 0L]
+  x[household_income %in% c(3, 4, 6, 8, 10, 11), HH_income := 1L]
+  x[household_income %in% c(13, 15, 16), HH_income := 2L]
+  x[household_income %in% c(18, 19, 21), HH_income := 3L]
+  x[household_income %in% c(23, 26), HH_income := 4L]
+  x[household_income %in% c(27, 28, 29, 30), HH_income := 5L]
+  x[, marry := as.integer(marital_status == 1)]
+  x[, house := as.integer(type_of_residence == 1)]
+  x
+}
+
+fill_projection <- function(d) {
+  x <- copy(d)
+  setorder(x, household_code, panel_year, month)
+  x[, projection_factor := projection_factor[which.max(!is.na(projection_factor))], by = household_code]
+  x
+}
+
+gml_path <- "../../../data/Nielsen/generated_months_lag.dta"
+unempm_path <- "../../../raw/unemployment_raw_m.dta"
+pcepi_path <- "../../../raw/PCEPI.dta"
+
+panel_totalexp_path <- find_panel_file("panelist_totalexp_m")
+panel_store_path <- find_panel_file("panelist_storerank_m")
+panel_good_path <- find_panel_file("panelist_goodrank_m")
+```
+
+## この章でコードがしていること（1分で把握）
+
+| セクション | コードでしていること | 主な入力 | 主な出力 |
+|---|---|---|---|
+| 共通前処理 | Nielsenファイルの有無確認、家計属性統制、重み補完を行う | `data/Nielsen/*`, `raw/unemployment_raw_m.dta` | 推定用データ（欠損時は`skipped`表） |
+| Table A13 | 総支出・店舗選択・価格選択の3パート要約統計を作る | `panelist_totalexp_m`, `panelist_storerank_m`, `panelist_goodrank_m` | `table_A13_part*_r.csv` |
+| Table A14 | 総支出回帰（経験×景気制御）を推定する | `panelist_totalexp_m` | `table_A14_r.csv`, `table_A14_r.tex` |
+| Table B17 | クーポン使用率・特売購入率・単価の行動回帰を推定する | `panelist_storerank_m`, `panelist_goodrank_m` | `table_B17_*.csv`, `table_B17_*.tex` |
+| Table B18 | 失業率変化と支出変化の関係を差分系列で推定する | `panelist_totalexp_m`, `PCEPI.dta` | `table_B18_r.csv`, `table_B18_r.tex` |
+| Figure B4 | 経験分位ごとのローリング平均系列を作図する | `panelist_totalexp_m` | `figure_B4_r.pdf`, `figure_B4_data_r.csv` |
+
+## Table A13
+
+```{r}
+if (is.na(panel_totalexp_path) || is.na(panel_store_path) || is.na(panel_good_path) || !file.exists(gml_path) || !file.exists(unempm_path)) {
+  print(write_skip_note(
+    "table_A13_r",
+    "Required Nielsen processed files are missing (panelist_totalexp_m / panelist_storerank_m / panelist_goodrank_m)."
+  ))
+} else {
+  gml <- as.data.table(read_dta(gml_path))
+  unempm <- as.data.table(read_dta(unempm_path))
+
+  # Part 1
+  d1 <- as.data.table(read_dta(panel_totalexp_path))
+  d1 <- d1[, !grepl("^(kitchen_|tv_|household_internet_|member_|dup)", names(d1)), with = FALSE]
+  d1 <- fill_projection(d1)
+  d1 <- merge(d1, gml[, .(male_head_yrborn, male_head_mborn, panel_year, month, experience_lambda1_lag, experience_lambda3_lag)], by = c("male_head_yrborn", "male_head_mborn", "panel_year", "month"), all.x = TRUE)
+  d1 <- merge(d1, unempm, by = c("panel_year", "month"), all.x = TRUE)
+  d1 <- add_controls(d1)
+  d1[, `:=`(
+    totalexp = log(totalexp_trip),
+    hprice = log(homepr_all),
+    age = panel_year - male_head_yrborn,
+    Unemp = as.integer(male_head_occupation == 12 & (panel_year - male_head_yrborn) < 65)
+  )]
+  d1[, wealth_house := hprice * house]
+  d1 <- d1[age >= 25 & age <= 75]
+  keep1 <- c("age", "household_size", "totalexp_trip", "household_income", "experience_lambda1_lag", "experience_lambda3_lag")
+  d1 <- d1[complete.cases(d1[, ..keep1])]
+  s1 <- summarize_vars(d1, keep1)
+  fwrite(s1, "../../../Tables/r/table_A13_part1_r.csv")
+  print(knitr::kable(s1, caption = "Table A13 Part 1 (R): Summary", format = "html", digits = 3))
+
+  # Part 2
+  d2 <- as.data.table(read_dta(panel_store_path))
+  d2 <- fill_projection(d2)
+  d2 <- merge(d2, gml[, .(male_head_yrborn, male_head_mborn, panel_year, month, experience_lambda1_lag)], by = c("male_head_yrborn", "male_head_mborn", "panel_year", "month"), all.x = TRUE)
+  d2 <- add_controls(d2)
+  d2[, age := panel_year - male_head_yrborn]
+  d2 <- d2[age >= 25 & age <= 75]
+  d2 <- d2[totalprice >= 50 & upc >= 5]
+  d2 <- d2[!is.na(onsale) & !is.na(coupon_use)]
+  s2 <- summarize_vars(d2, c("onsale", "coupon_use"))
+  fwrite(s2, "../../../Tables/r/table_A13_part2_r.csv")
+  print(knitr::kable(s2, caption = "Table A13 Part 2 (R): Summary", format = "html", digits = 3))
+
+  # Part 3
+  d3 <- as.data.table(read_dta(panel_good_path))
+  d3 <- fill_projection(d3)
+  d3 <- merge(d3, gml[, .(male_head_yrborn, male_head_mborn, panel_year, month, experience_lambda1_lag, experience_lambda3_lag)], by = c("male_head_yrborn", "male_head_mborn", "panel_year", "month"), all.x = TRUE)
+  d3 <- add_controls(d3)
+  d3[, age := panel_year - male_head_yrborn]
+  d3 <- d3[age >= 25 & age <= 75]
+  d3 <- d3[expend >= 50]
+  d3[, unitprice := log(R_unitprice / (1 - R_unitprice))]
+  d3 <- d3[is.finite(unitprice)]
+  s3 <- summarize_vars(d3, c("R_unitprice"))
+  fwrite(s3, "../../../Tables/r/table_A13_part3_r.csv")
+  print(knitr::kable(s3, caption = "Table A13 Part 3 (R): Summary", format = "html", digits = 3))
+}
+```
+
+## Table A14
+
+```{r}
+if (is.na(panel_totalexp_path) || !file.exists(gml_path) || !file.exists(unempm_path)) {
+  print(write_skip_note("table_A14_r", "Required Nielsen processed files are missing."))
+} else {
+  gml <- as.data.table(read_dta(gml_path))
+  unempm <- as.data.table(read_dta(unempm_path))
+  d <- as.data.table(read_dta(panel_totalexp_path))
+  d <- d[, !grepl("^(kitchen_|tv_|household_internet_|member_|dup)", names(d)), with = FALSE]
+  d <- fill_projection(d)
+  d <- merge(d, gml[, .(male_head_yrborn, male_head_mborn, panel_year, month, experience_lambda1_lag, experience_lambda3_lag)], by = c("male_head_yrborn", "male_head_mborn", "panel_year", "month"), all.x = TRUE)
+  d <- merge(d, unempm, by = c("panel_year", "month"), all.x = TRUE)
+  d <- add_controls(d)
+  d[, `:=`(
+    totalexp = log(totalexp_trip),
+    hprice = log(homepr_all),
+    age = panel_year - male_head_yrborn,
+    Unemp = as.integer(male_head_occupation == 12 & (panel_year - male_head_yrborn) < 65),
+    yrmon = paste(panel_year, month, sep = "_")
+  )]
+  d[, wealth_house := hprice * house]
+  d <- d[age >= 25 & age <= 75]
+  keep <- c("totalexp", "experience_lambda1_lag", "experience_lambda3_lag", "value", "Unemp", "house", "hprice", "wealth_house", "HH_income", "household_size", "male_head_education", "marry", "race", "projection_factor", "age", "yrmon", "household_code", "dma_code", "male_head_yrborn")
+  d <- d[complete.cases(d[, ..keep])]
+
+  m1 <- feols(totalexp ~ experience_lambda1_lag + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + household_code + dma_code, d, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  m2 <- feols(totalexp ~ experience_lambda1_lag + value + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + household_code + dma_code, d, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  m3 <- feols(totalexp ~ experience_lambda3_lag + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + household_code + dma_code, d, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  m4 <- feols(totalexp ~ experience_lambda3_lag + value + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + household_code + dma_code, d, weights = ~projection_factor, vcov = ~male_head_yrborn)
+
+  print(save_models(
+    list(m1, m2, m3, m4),
+    keep = c("experience_lambda1_lag", "experience_lambda3_lag", "value"),
+    stem = "table_A14_r",
+    caption = "Table A14 (R): Nielsen Expenditure Regressions"
+  ))
+}
+```
+
+## Table B17
+
+```{r}
+if (is.na(panel_store_path) || is.na(panel_good_path) || !file.exists(gml_path)) {
+  print(write_skip_note("table_B17_r", "Required Nielsen processed files are missing."))
+} else {
+  gml <- as.data.table(read_dta(gml_path))
+
+  # Top and Bottom panels from store-rank data
+  ds <- as.data.table(read_dta(panel_store_path))
+  ds <- fill_projection(ds)
+  ds <- merge(ds, gml[, .(male_head_yrborn, male_head_mborn, panel_year, month, experience_lambda1_lag)], by = c("male_head_yrborn", "male_head_mborn", "panel_year", "month"), all.x = TRUE)
+  ds <- add_controls(ds)
+  ds[, `:=`(
+    age = panel_year - male_head_yrborn,
+    Unemp = as.integer(male_head_occupation == 12 & (panel_year - male_head_yrborn) < 65),
+    hprice = log(homepr_all),
+    yrmon = paste(panel_year, month, sep = "_")
+  )]
+  ds[, wealth_house := hprice * house]
+  ds <- ds[age >= 25 & age <= 75]
+  ds <- ds[totalprice >= 50 & upc >= 5]
+  keep <- c("experience_lambda1_lag", "Unemp", "house", "hprice", "wealth_house", "HH_income", "household_size", "male_head_education", "marry", "race", "projection_factor", "age", "yrmon", "household_code", "dma_code", "male_head_yrborn", "onsale", "coupon_use", "value")
+  ds <- ds[complete.cases(ds[, ..keep])]
+
+  top1 <- feols(coupon_use ~ experience_lambda1_lag + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code, ds, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  top2 <- feols(coupon_use ~ experience_lambda1_lag + value + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code, ds, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  top3 <- feols(coupon_use ~ experience_lambda1_lag + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code + household_code, ds, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  top4 <- feols(coupon_use ~ experience_lambda1_lag + value + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code + household_code, ds, weights = ~projection_factor, vcov = ~male_head_yrborn)
+
+  bot1 <- feols(onsale ~ experience_lambda1_lag + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code, ds, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  bot2 <- feols(onsale ~ experience_lambda1_lag + value + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code, ds, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  bot3 <- feols(onsale ~ experience_lambda1_lag + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code + household_code, ds, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  bot4 <- feols(onsale ~ experience_lambda1_lag + value + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code + household_code, ds, weights = ~projection_factor, vcov = ~male_head_yrborn)
+
+  print(save_models(
+    list(top1, top2, top3, top4),
+    keep = c("experience_lambda1_lag", "value"),
+    stem = "table_B17_top_r",
+    caption = "Table B17 Top (R): Coupon Use"
+  ))
+  print(save_models(
+    list(bot1, bot2, bot3, bot4),
+    keep = c("experience_lambda1_lag", "value"),
+    stem = "table_B17_bot_r",
+    caption = "Table B17 Bottom (R): On-sale Share"
+  ))
+
+  # Mid panel from good-rank data
+  dg <- as.data.table(read_dta(panel_good_path))
+  dg <- fill_projection(dg)
+  dg <- merge(dg, gml[, .(male_head_yrborn, male_head_mborn, panel_year, month, experience_lambda1_lag, experience_lambda3_lag)], by = c("male_head_yrborn", "male_head_mborn", "panel_year", "month"), all.x = TRUE)
+  dg <- add_controls(dg)
+  dg[, `:=`(
+    age = panel_year - male_head_yrborn,
+    Unemp = as.integer(male_head_occupation == 12 & (panel_year - male_head_yrborn) < 65),
+    hprice = log(homepr_all),
+    yrmon = paste(panel_year, month, sep = "_")
+  )]
+  dg[, wealth_house := hprice * house]
+  dg[, unitprice := log(R_unitprice / (1 - R_unitprice))]
+  dg <- dg[age >= 25 & age <= 75]
+  dg <- dg[expend >= 50]
+  keepg <- c("unitprice", "experience_lambda1_lag", "Unemp", "house", "hprice", "wealth_house", "HH_income", "household_size", "male_head_education", "marry", "race", "projection_factor", "age", "yrmon", "household_code", "dma_code", "male_head_yrborn", "value")
+  dg <- dg[is.finite(unitprice) & complete.cases(dg[, ..keepg])]
+
+  mid1 <- feols(unitprice ~ experience_lambda1_lag + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code, dg, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  mid2 <- feols(unitprice ~ experience_lambda1_lag + value + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code, dg, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  mid3 <- feols(unitprice ~ experience_lambda1_lag + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code + household_code, dg, weights = ~projection_factor, vcov = ~male_head_yrborn)
+  mid4 <- feols(unitprice ~ experience_lambda1_lag + value + Unemp + house + hprice + wealth_house + i(HH_income) + household_size + i(male_head_education) + i(marry) + i(race) | age + yrmon + dma_code + household_code, dg, weights = ~projection_factor, vcov = ~male_head_yrborn)
+
+  print(save_models(
+    list(mid1, mid2, mid3, mid4),
+    keep = c("experience_lambda1_lag", "value"),
+    stem = "table_B17_mid_r",
+    caption = "Table B17 Mid (R): Unit Price"
+  ))
+}
+```
+
+## Table B18
+
+```{r}
+if (is.na(panel_totalexp_path) || !file.exists(gml_path) || !file.exists(unempm_path)) {
+  print(write_skip_note("table_B18_r", "Required Nielsen processed files are missing."))
+} else {
+  gml <- as.data.table(read_dta(gml_path))
+  unempm <- as.data.table(read_dta(unempm_path))
+
+  d <- as.data.table(read_dta(panel_totalexp_path))
+  d <- d[, !grepl("^(kitchen_|tv_|household_internet_|member_|dup)", names(d)), with = FALSE]
+  d <- fill_projection(d)
+  d <- add_controls(d)
+  d <- merge(d, gml[, .(male_head_yrborn, male_head_mborn, panel_year, month, experience_lambda1_lag)], by = c("male_head_yrborn", "male_head_mborn", "panel_year", "month"), all.x = TRUE)
+  d <- merge(d, unempm, by = c("panel_year", "month"), all.x = TRUE)
+  d[, `:=`(
+    age_male = panel_year - male_head_yrborn,
+    yrmon = paste(panel_year, month, sep = "_")
+  )]
+  d <- d[!is.na(age_male) & age_male >= 25 & age_male <= 75]
+  setorder(d, household_code, yrmon)
+  d[, `:=`(
+    unempd = log(value) - log(shift(value, 1)),
+    unempd_nat = log(Civilianunemploymentrate) - log(shift(Civilianunemploymentrate, 1)),
+    totalexpd = log(totalexp) - log(shift(totalexp, 1))
+  ), by = household_code]
+  d[, `:=`(
+    unempd_nat_pos = fifelse(unempd_nat < 0, -unempd_nat, 0),
+    unempd_nat_neg = fifelse(unempd_nat > 0, unempd_nat, 0),
+    unempd_loc_pos = fifelse(unempd < 0, -unempd, 0),
+    unempd_loc_neg = fifelse(unempd > 0, unempd, 0)
+  )]
+  d[, `:=`(
+    unempd_nat_pos_age = age_male * unempd_nat_pos,
+    unempd_nat_neg_age = age_male * unempd_nat_neg,
+    unempd_loc_pos_age = age_male * unempd_loc_pos,
+    unempd_loc_neg_age = age_male * unempd_loc_neg
+  )]
+
+  keep <- c("totalexpd", "unempd_nat_pos_age", "unempd_nat_neg_age", "unempd_loc_pos", "unempd_loc_neg", "unempd_loc_pos_age", "unempd_loc_neg_age", "HH_income", "household_size", "male_head_education", "marry", "race", "age_male", "dma_code", "projection_factor", "yrmon", "household_code")
+  d <- d[complete.cases(d[, ..keep])]
+
+  m1 <- feols(totalexpd ~ unempd_nat_pos_age + unempd_nat_neg_age + unempd_loc_pos + unempd_loc_neg + i(HH_income) + household_size + male_head_education + marry + i(race) + i(age_male) + i(dma_code) | yrmon, d, weights = ~projection_factor, vcov = ~household_code)
+  m2 <- feols(totalexpd ~ unempd_nat_pos_age + unempd_nat_neg_age + unempd_loc_pos + unempd_loc_neg + i(HH_income) + household_size + male_head_education + marry + i(race) + i(age_male) + i(dma_code) | yrmon + household_code, d, weights = ~projection_factor, vcov = ~household_code)
+  m3 <- feols(totalexpd ~ unempd_loc_pos + unempd_loc_pos_age + unempd_loc_neg + unempd_loc_neg_age + i(HH_income) + household_size + male_head_education + marry + i(race) + i(age_male) + i(dma_code) | yrmon, d, weights = ~projection_factor, vcov = ~household_code)
+  m4 <- feols(totalexpd ~ unempd_loc_pos + unempd_loc_pos_age + unempd_loc_neg + unempd_loc_neg_age + i(HH_income) + household_size + male_head_education + marry + i(race) + i(age_male) + i(dma_code) | yrmon + household_code, d, weights = ~projection_factor, vcov = ~household_code)
+  m5 <- feols(totalexpd ~ unempd_nat_pos_age + unempd_nat_neg_age + unempd_loc_pos + unempd_loc_pos_age + unempd_loc_neg + unempd_loc_neg_age + i(HH_income) + household_size + male_head_education + marry + i(race) + i(age_male) + i(dma_code) | yrmon, d, weights = ~projection_factor, vcov = ~household_code)
+  m6 <- feols(totalexpd ~ unempd_nat_pos_age + unempd_nat_neg_age + unempd_loc_pos + unempd_loc_pos_age + unempd_loc_neg + unempd_loc_neg_age + i(HH_income) + household_size + male_head_education + marry + i(race) + i(age_male) + i(dma_code) | yrmon + household_code, d, weights = ~projection_factor, vcov = ~household_code)
+
+  print(save_models(
+    list(m1, m2, m3, m4, m5, m6),
+    keep = c("unempd_nat_pos_age", "unempd_nat_neg_age", "unempd_loc_pos", "unempd_loc_pos_age", "unempd_loc_neg", "unempd_loc_neg_age"),
+    stem = "table_B18_r",
+    caption = "Table B18 (R): Expenditure Change Regressions"
+  ))
+}
+```
+
+## Figure B4
+
+```{r}
+if (is.na(panel_totalexp_path) || !file.exists(pcepi_path)) {
+  print(write_skip_note("figure_B4_r", "Required Nielsen processed files are missing."))
+} else {
+  d <- as.data.table(read_dta(panel_totalexp_path))
+  pce <- as.data.table(read_dta(pcepi_path))
+  d <- d[panel_year > 2003 & panel_year < 2013]
+  d <- merge(d, pce[, .(yrmon, inflation)], by = "yrmon", all.x = TRUE)
+  d <- d[!is.na(inflation)]
+  d[, totalexp := totalexp / inflation]
+  d[, index := .N, by = household_code]
+  d[, age_male := panel_year - female_head_yrborn]
+  d <- d[!is.na(age_male) & age_male >= 25 & age_male <= 75]
+
+  d[, flag := 0L]
+  d[(age_male == 25 & panel_year == 2005 & index == 96) |
+      (age_male == 25 & panel_year == 2006 & index == 84) |
+      (age_male == 25 & panel_year == 2007 & index == 72) |
+      (age_male == 25 & panel_year == 2008 & index == 60) |
+      (age_male == 25 & panel_year == 2009 & index == 48) |
+      (age_male == 25 & panel_year == 2010 & index == 36) |
+      (age_male == 25 & panel_year == 2011 & index == 24) |
+      (age_male == 25 & panel_year == 2012 & index == 12), flag := 1L]
+  d[(age_male == 75 & panel_year == 2011 & index == 96) |
+      (age_male == 75 & panel_year == 2010 & index == 84) |
+      (age_male == 75 & panel_year == 2009 & index == 72) |
+      (age_male == 75 & panel_year == 2008 & index == 60) |
+      (age_male == 75 & panel_year == 2007 & index == 48) |
+      (age_male == 75 & panel_year == 2006 & index == 36) |
+      (age_male == 75 & panel_year == 2005 & index == 24) |
+      (age_male == 75 & panel_year == 2004 & index == 12), flag := 1L]
+  d <- d[!(index != 108 & flag == 0)]
+
+  d[, age_group := fifelse(age_male < 40, 1L, fifelse(age_male <= 60, 2L, 3L))]
+  months <- sort(unique(d$yrmon))
+  out <- vector("list", length(months))
+  j <- 1L
+  for (m in months) {
+    w <- d[yrmon %in% (m - 5):m & yrmon <= 630]
+    if (nrow(w) == 0) next
+    if (all(is.na(w$projection_factor)) || sum(w$projection_factor, na.rm = TRUE) == 0) next
+    overall <- weighted.mean(w$totalexp, w$projection_factor, na.rm = TRUE)
+    bygrp <- w[, .(totalexp_age_avg = weighted.mean(totalexp, projection_factor, na.rm = TRUE)), by = age_group]
+    bygrp[, `:=`(
+      yrmon = m,
+      totalexp_avg = overall,
+      totalexp_diff = totalexp_age_avg - overall,
+      totalexp_diff_p = totalexp_age_avg / overall - 1
+    )]
+    out[[j]] <- bygrp
+    j <- j + 1L
+  }
+  plotd <- rbindlist(out, fill = TRUE)
+  fwrite(plotd, "../../../Figures/r/figure_B4_data_r.csv")
+  print(knitr::kable(head(plotd, 20), caption = "Figure B4 (R): Rolling Means (first 20 rows)", format = "html", digits = 3))
+
+  p <- ggplot(plotd, aes(x = yrmon, y = totalexp_diff, linetype = factor(age_group))) +
+    geom_line() +
+    labs(x = "", y = "Deviation from Mean Expenditure ($)", linetype = "Age Group") +
+    scale_linetype_manual(values = c("solid", "longdash", "dotdash"), labels = c("Age<40", "Age 40 to 60", "Age>60")) +
+    theme_minimal()
+
+  ggsave("../../../Figures/r/figure_B4_r.pdf", p, width = 7, height = 4.5)
+  print(p)
+}
+```

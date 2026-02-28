@@ -1,0 +1,18 @@
+.DS_Store
+
+# Large replication datasets and generated outputs
+Replication/raw/
+Replication/data/
+Replication/Figures/
+Replication/Tables/
+
+# Generated Quarto outputs
+Replication/code/R/book/_book/
+Replication/code/R/book/.quarto/
+
+# Local caches
+*.log
+*.tmp
+
+# Stata binaries (kept outside this lightweight code repo)
+*.dta

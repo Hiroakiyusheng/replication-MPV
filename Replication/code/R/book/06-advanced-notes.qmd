@@ -1,0 +1,324 @@
+---
+title: "Appendix: PSID Extended (A4, A7, A12)"
+---
+
+```{r}
+library(data.table)
+library(haven)
+library(fixest)
+library(knitr)
+
+dir.create("../../../Tables/r", recursive = TRUE, showWarnings = FALSE)
+dir.create("../../../Tables/r/table_a12", recursive = TRUE, showWarnings = FALSE)
+
+extract_fixest_terms <- function(m, keep, model_id) {
+  ct <- as.data.table(coeftable(m), keep.rownames = "term")
+  if ("Estimate" %in% names(ct)) setnames(ct, "Estimate", "estimate")
+  if ("Std. Error" %in% names(ct)) setnames(ct, "Std. Error", "std_error")
+  if ("t value" %in% names(ct)) setnames(ct, "t value", "stat")
+  if ("z value" %in% names(ct)) setnames(ct, "z value", "stat")
+  if ("Pr(>|t|)" %in% names(ct)) setnames(ct, "Pr(>|t|)", "p_value")
+  if ("Pr(>|z|)" %in% names(ct)) setnames(ct, "Pr(>|z|)", "p_value")
+  if (!("estimate" %in% names(ct))) ct[, estimate := NA_real_]
+  if (!("std_error" %in% names(ct))) ct[, std_error := NA_real_]
+  if (!("stat" %in% names(ct))) ct[, stat := NA_real_]
+  if (!("p_value" %in% names(ct))) ct[, p_value := NA_real_]
+  ct <- ct[term %in% keep, .(model = model_id, term, estimate, std_error, stat, p_value)]
+  ct
+}
+
+save_models <- function(models, keep, stem, caption = stem) {
+  tab <- rbindlist(lapply(seq_along(models), function(i) extract_fixest_terms(models[[i]], keep, paste0("M", i))), fill = TRUE)
+  tab[, term := factor(term, levels = keep)]
+  setorder(tab, term, model)
+  tab[, term := as.character(term)]
+  fwrite(tab, sprintf("../../../Tables/r/%s.csv", stem))
+  tex <- knitr::kable(tab, format = "latex", booktabs = TRUE, caption = caption, digits = 3)
+  writeLines(tex, sprintf("../../../Tables/r/%s.tex", stem))
+  knitr::kable(tab, caption = caption, format = "html", digits = 3)
+}
+
+fallback_year_lag <- function(x, year, k) {
+  out <- rep(NA_real_, length(x))
+  for (d in k:1) {
+    idx <- match(year - d, year)
+    pick <- is.na(out) & !is.na(idx)
+    out[pick] <- x[idx[pick]]
+  }
+  out
+}
+
+drop_singletons <- function(d) {
+  x <- copy(d)
+  x[, n_id := .N, by = ID]
+  x[n_id > 1]
+}
+```
+
+## この章でコードがしていること（1分で把握）
+
+| セクション | コードでしていること | 主な入力 | 主な出力 |
+|---|---|---|---|
+| Table A4 | 夫婦合算の経験変数で消費回帰を推定する | `psid_new_final_spouses.dta` | `table_A4_r.csv`, `table_A4_r.tex` |
+| Table A7 | 動学パネル（pgmm）を推定し、未導入時はFE近似にフォールバックする | `psid_new_final_lag_LS.dta` | `table_A7_r.csv`, `table_A7_r.tex` |
+| Table A12 | 資産蓄積関連の長ラグ所得平均を構築し、複数仕様を推定する | `psid_new_with_exp_allf_lagged.dta` | `table_A12_*.csv`, `table_A12_*.tex` |
+
+## Table A4 (Spousal Experience)
+
+```{r}
+a4_path <- "../../../code/PSID/Table_A4/psid_new_final_spouses.dta"
+a4 <- as.data.table(read_dta(a4_path))
+setorder(a4, ID, year)
+a4[, num := .N, by = ID]
+a4 <- a4[tag_10_90 == 1 & num > 1]
+
+ctrl <- "income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2 + couple"
+rhs <- paste(
+  "GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state +",
+  ctrl,
+  "+ i(HD_RACE) + i(HEAD_EDU)"
+)
+
+a4_m1 <- feols(as.formula(sprintf("total ~ exp_personal_hh + %s | age + GSA + year + ID", rhs)), a4, vcov = ~cohort)
+a4_m2 <- feols(as.formula(sprintf("total ~ exp_state_nat_hh + %s | age + GSA + year + ID", rhs)), a4, vcov = ~cohort)
+a4_m3 <- feols(as.formula(sprintf("total ~ exp_state_nat_hh + exp_personal_hh + %s | age + GSA + year + ID", rhs)), a4, vcov = ~cohort)
+a4_m4 <- feols(as.formula(sprintf("total ~ exp_personal_hh_l3 + %s | age + GSA + year + ID", rhs)), a4, vcov = ~cohort)
+a4_m5 <- feols(as.formula(sprintf("total ~ exp_state_nat_hh_l3 + %s | age + GSA + year + ID", rhs)), a4, vcov = ~cohort)
+a4_m6 <- feols(as.formula(sprintf("total ~ exp_state_nat_hh_l3 + exp_personal_hh_l3 + %s | age + GSA + year + ID", rhs)), a4, vcov = ~cohort)
+
+save_models(
+  list(a4_m1, a4_m2, a4_m3, a4_m4, a4_m5, a4_m6),
+  keep = c("exp_personal_hh", "exp_state_nat_hh", "exp_personal_hh_l3", "exp_state_nat_hh_l3"),
+  stem = "table_A4_r",
+  caption = "Table A4 (R): Spousal Experience"
+)
+```
+
+## Table A7 (Dynamic Panel GMM)
+
+```{r}
+a7 <- as.data.table(read_dta("../../../data/PSID/psid_new_final_lag_LS.dta"))
+setorder(a7, ID, year)
+a7[, num := .N, by = ID]
+a7 <- a7[tag_10_90 == 1 & num > 1]
+if (!("seq" %in% names(a7))) a7[, seq := seq_len(.N), by = ID]
+a7[, l_total := shift(total, 1), by = ID]
+
+ctrl <- "income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2"
+rhs_terms <- paste(
+  "GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state +",
+  ctrl,
+  "+ i(HD_RACE) + i(HEAD_EDU) + i(age) + i(year) + i(GSA)"
+)
+
+if (requireNamespace("plm", quietly = TRUE) && requireNamespace("lmtest", quietly = TRUE)) {
+  pdata <- plm::pdata.frame(as.data.frame(a7), index = c("ID", "seq"))
+
+  run_pgmm <- function(exp_term) {
+    rhs <- paste(exp_term, rhs_terms, sep = " + ")
+    fml <- as.formula(paste0("total ~ lag(total,1) + ", rhs, " | lag(total,2:99) + ", rhs))
+    plm::pgmm(fml, data = pdata, effect = "individual", model = "onestep", transformation = "d")
+  }
+
+  pgmm_models <- list(
+    run_pgmm("exp_personal_lagged_1"),
+    run_pgmm("exp_state_nat_lagged_1"),
+    run_pgmm("exp_state_nat_lagged_1 + exp_personal_lagged_1"),
+    run_pgmm("exp_personal_nat_l3"),
+    run_pgmm("exp_state_nat_lagged_l3"),
+    run_pgmm("exp_state_nat_lagged_l3 + exp_personal_nat_l3")
+  )
+
+  extract_pgmm <- function(m, model_id) {
+    ct <- as.data.table(lmtest::coeftest(m, vcov. = plm::vcovHC(m, method = "arellano", type = "HC0", cluster = "group")), keep.rownames = "term")
+    setnames(ct, old = c("Estimate", "Std. Error", "z value", "Pr(>|z|)"), new = c("estimate", "std_error", "stat", "p_value"))
+    ct[, model := model_id]
+    ct
+  }
+
+  a7_out <- rbindlist(Map(extract_pgmm, pgmm_models, seq_along(pgmm_models)), fill = TRUE)
+  a7_out <- a7_out[term %in% c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3")]
+  fwrite(a7_out, "../../../Tables/r/table_A7_r.csv")
+  print(knitr::kable(
+    a7_out[, .(model, term, estimate, std_error, stat, p_value)],
+    caption = "Table A7 (R pgmm): Dynamic Panel Results",
+    format = "html",
+    digits = 3
+  ))
+  writeLines(
+    c(
+      "\\begin{table}[!htbp]\\centering",
+      "\\caption{Table A7 (R pgmm output in CSV)}",
+      "\\label{tab:a7-r}",
+      "\\begin{tabular}{llrr}",
+      "\\toprule",
+      "Model & Term & Estimate & Std. Error\\\\",
+      "\\midrule",
+      paste(a7_out$model, a7_out$term, sprintf('%.3f', a7_out$estimate), sprintf('%.3f', a7_out$std_error), "\\\\"),
+      "\\bottomrule",
+      "\\end{tabular}",
+      "\\end{table}"
+    ),
+    "../../../Tables/r/table_A7_r.tex"
+  )
+} else {
+  a7_m1 <- feols(as.formula(sprintf("total ~ l_total + exp_personal_lagged_1 + %s | ID", rhs_terms)), a7, vcov = ~cohort)
+  a7_m2 <- feols(as.formula(sprintf("total ~ l_total + exp_state_nat_lagged_1 + %s | ID", rhs_terms)), a7, vcov = ~cohort)
+  a7_m3 <- feols(as.formula(sprintf("total ~ l_total + exp_state_nat_lagged_1 + exp_personal_lagged_1 + %s | ID", rhs_terms)), a7, vcov = ~cohort)
+  a7_m4 <- feols(as.formula(sprintf("total ~ l_total + exp_personal_nat_l3 + %s | ID", rhs_terms)), a7, vcov = ~cohort)
+  a7_m5 <- feols(as.formula(sprintf("total ~ l_total + exp_state_nat_lagged_l3 + %s | ID", rhs_terms)), a7, vcov = ~cohort)
+  a7_m6 <- feols(as.formula(sprintf("total ~ l_total + exp_state_nat_lagged_l3 + exp_personal_nat_l3 + %s | ID", rhs_terms)), a7, vcov = ~cohort)
+
+  print(save_models(
+    list(a7_m1, a7_m2, a7_m3, a7_m4, a7_m5, a7_m6),
+    keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3"),
+    stem = "table_A7_r",
+    caption = "Table A7 (R FE fallback): Dynamic Panel Approximation"
+  ))
+  writeLines(
+    "plm/lmtest が未インストールのため、Table A7 は FE 近似推定で出力しています。",
+    "../../../Tables/r/table_A7_r_note.txt"
+  )
+}
+```
+
+## Table A12 (Wealth Accumulation)
+
+```{r}
+a12 <- as.data.table(read_dta("../../../data/PSID/psid_new_with_exp_allf_lagged.dta"))
+a12 <- a12[!(Fam_ID > 3000 & Fam_ID < 5000)]
+a12 <- a12[age >= 25 & age <= 75]
+setorder(a12, ID, year)
+a12[, seq := seq_len(.N), by = ID]
+a12[, L1_INCOME := shift(INCOME_TOTAL_FAM, 1), by = ID]
+
+a12[, UNEMP := as.integer(EMPLOY_STATUS == 3)]
+a12[is.na(UNEMP), UNEMP := 0L]
+a12[, `:=`(
+  L1_UNEMP = shift(UNEMP, 1),
+  L2_UNEMP = shift(UNEMP, 2),
+  L3_UNEMP = shift(UNEMP, 3)
+), by = ID]
+
+if ("exp_personal_nat2" %in% names(a12)) {
+  setnames(a12, "exp_personal_nat2", "exp_personal_lagged_1")
+}
+
+a12 <- a12[
+  !is.na(FOOD_C) &
+  !is.na(GSA) &
+  FAM_REGION != 6 &
+  !is.na(exp_state_nat_lagged_1) &
+  !is.na(exp_personal_lagged_1) &
+  !is.na(HEAD_EDU) &
+  !is.na(HD_RACE) &
+  !is.na(L1_INCOME) &
+  !is.na(L1_UNEMP) &
+  !is.na(L2_UNEMP) &
+  !is.na(L3_UNEMP)
+]
+
+a12[, LIQUID_WEALTH := CHECK_SAVING + STOCK - DEBT]
+a12[year == 2013, LIQUID_WEALTH := CHECK_SAVING + STOCK - DEBT + FARMBUS_DEBT_13 + REALESTATE_DEBT_13]
+
+a12[, ILLIQUID_WEALTH := NA_real_]
+a12[year %in% c(1984, 1994), ILLIQUID_WEALTH := FARM_BUS + OTHER_REAL_ESTATE + VEHICLE_VALUE + OTHER_ASSET_VALUE + HOME_EQUITY_VALUE]
+a12[year >= 1999 & year != 2013, ILLIQUID_WEALTH := FARM_BUS + OTHER_REAL_ESTATE + VEHICLE_VALUE + OTHER_ASSET_VALUE + HOME_EQUITY_VALUE + ANNUITY_IRA]
+a12[year == 2013, ILLIQUID_WEALTH := FARM_BUS + OTHER_REAL_ESTATE + VEHICLE_VALUE + OTHER_ASSET_VALUE + ANNUITY_IRA - FARMBUS_DEBT_13 - REALESTATE_DEBT_13 + HOME_EQUITY_VALUE]
+
+a12 <- drop_singletons(a12)
+
+a12[, `:=`(
+  total = log(TOTAL_CONSUMP1 + 0.1),
+  liquid_wealth = log(LIQUID_WEALTH + 8926000.1),
+  illiquid_wealth = log(ILLIQUID_WEALTH + 359946.1),
+  total_wealth = log(WEALTH_TOTAL + 2320000.1),
+  income = log(INCOME_TOTAL_FAM + 84022.1),
+  l1_income = log(L1_INCOME + 84022.1),
+  GENDER = GENDER_INDIVIDUAL - 1,
+  cohort = year - age
+)]
+
+a12[, exp_personal_lagged_1 := exp_personal_lagged_1 / 100]
+a12[, exp_personal_nat_l3 := exp_personal_nat_l3 / 100]
+a12 <- drop_singletons(a12)
+
+for (k in 2:14) {
+  nm <- sprintf("L%d_INCOME", k)
+  a12[, (nm) := fallback_year_lag(INCOME_TOTAL_FAM, year, k), by = ID]
+}
+
+a12[, `:=`(
+  L4_INCOME_AVE = (L1_INCOME + L2_INCOME + L3_INCOME) / 3,
+  L6_INCOME_AVE = (L1_INCOME + L2_INCOME + L3_INCOME + L4_INCOME + L5_INCOME) / 5,
+  L8_INCOME_AVE = (L1_INCOME + L2_INCOME + L3_INCOME + L4_INCOME + L5_INCOME + L6_INCOME + L7_INCOME) / 7,
+  L10_INCOME_AVE = (L1_INCOME + L2_INCOME + L3_INCOME + L4_INCOME + L5_INCOME + L6_INCOME + L7_INCOME + L8_INCOME + L9_INCOME) / 9,
+  L12_INCOME_AVE = (L1_INCOME + L2_INCOME + L3_INCOME + L4_INCOME + L5_INCOME + L6_INCOME + L7_INCOME + L8_INCOME + L9_INCOME + L10_INCOME + L11_INCOME) / 11,
+  L14_INCOME_AVE = (L1_INCOME + L2_INCOME + L3_INCOME + L4_INCOME + L5_INCOME + L6_INCOME + L7_INCOME + L8_INCOME + L9_INCOME + L10_INCOME + L11_INCOME + L12_INCOME + L13_INCOME) / 13
+)]
+
+a12[, `:=`(
+  l4_income_ave = log(L4_INCOME_AVE),
+  l6_income_ave = log(L6_INCOME_AVE),
+  l8_income_ave = log(L8_INCOME_AVE),
+  l10_income_ave = log(L10_INCOME_AVE),
+  l12_income_ave = log(L12_INCOME_AVE),
+  l14_income_ave = log(L14_INCOME_AVE)
+)]
+
+for (k in c(4, 6, 8, 10, 12, 14)) {
+  a12[, sprintf("L%d_exp_state_nat", k) := fallback_year_lag(exp_state_nat_lagged_1, year, k), by = ID]
+  a12[, sprintf("L%d_exp_personal", k) := fallback_year_lag(exp_personal_lagged_1, year, k), by = ID]
+  a12[, sprintf("L%d_exp_state_nat_lagged_l3", k) := fallback_year_lag(exp_state_nat_lagged_l3, year, k), by = ID]
+  a12[, sprintf("L%d_exp_personal_nat_l3", k) := fallback_year_lag(exp_personal_nat_l3, year, k), by = ID]
+  a12[, sprintf("L%d_WEALTH_TOTAL", k) := fallback_year_lag(WEALTH_TOTAL, year, k), by = ID]
+  a12[, sprintf("l%d_total_wealth", k) := log(get(sprintf("L%d_WEALTH_TOTAL", k))), by = ID]
+}
+
+run_a12 <- function(dt, x, lambda = c("1", "3")) {
+  lambda <- match.arg(lambda)
+  xchr <- as.character(x)
+  income_ctrl <- sprintf("l%s_income_ave", xchr)
+  wealth_ctrl <- sprintf("l%s_total_wealth", xchr)
+
+  if (lambda == "1") {
+    v1 <- sprintf("L%s_exp_personal", xchr)
+    v2 <- sprintf("L%s_exp_state_nat", xchr)
+    keep <- c(v1, v2)
+    m1 <- feols(as.formula(sprintf("total_wealth ~ %s + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + income + %s + %s + i(HD_RACE) + i(HEAD_EDU) | age + year + GSA", v1, income_ctrl, wealth_ctrl)), dt, vcov = ~cohort)
+    m2 <- feols(as.formula(sprintf("total_wealth ~ %s + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + income + %s + %s + i(HD_RACE) + i(HEAD_EDU) | age + year + GSA", v2, income_ctrl, wealth_ctrl)), dt, vcov = ~cohort)
+    m3 <- feols(as.formula(sprintf("total_wealth ~ %s + %s + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + income + %s + %s + i(HD_RACE) + i(HEAD_EDU) | age + year + GSA", v1, v2, income_ctrl, wealth_ctrl)), dt, vcov = ~cohort)
+    print(save_models(
+      list(m1, m2, m3),
+      keep = keep,
+      stem = sprintf("table_a12/table_A12_lambda1_%s_r", xchr),
+      caption = sprintf("Table A12 (R): lambda=1, horizon=%s", xchr)
+    ))
+  } else {
+    v1 <- sprintf("L%s_exp_personal_nat_l3", xchr)
+    v2 <- sprintf("L%s_exp_state_nat_lagged_l3", xchr)
+    keep <- c(v1, v2)
+    m1 <- feols(as.formula(sprintf("total_wealth ~ %s + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + income + %s + %s + i(HD_RACE) + i(HEAD_EDU) | age + year + GSA", v1, income_ctrl, wealth_ctrl)), dt, vcov = ~cohort)
+    m2 <- feols(as.formula(sprintf("total_wealth ~ %s + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + income + %s + %s + i(HD_RACE) + i(HEAD_EDU) | age + year + GSA", v2, income_ctrl, wealth_ctrl)), dt, vcov = ~cohort)
+    m3 <- feols(as.formula(sprintf("total_wealth ~ %s + %s + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + income + %s + %s + i(HD_RACE) + i(HEAD_EDU) | age + year + GSA", v1, v2, income_ctrl, wealth_ctrl)), dt, vcov = ~cohort)
+    print(save_models(
+      list(m1, m2, m3),
+      keep = keep,
+      stem = sprintf("table_a12/table_A12_lambda3_%s_r", xchr),
+      caption = sprintf("Table A12 (R): lambda=3, horizon=%s", xchr)
+    ))
+  }
+}
+
+for (x in c(6, 8, 10, 12)) {
+  need1 <- sprintf("L%d_exp_state_nat", x)
+  need2 <- sprintf("L%d_exp_personal", x)
+  need3 <- sprintf("l%d_income_ave", x)
+  dsub <- a12[!is.na(get(need1)) & !is.na(get(need2)) & !is.na(get(need3))]
+  dsub <- drop_singletons(dsub)
+  if (nrow(dsub) > 0) {
+    run_a12(dsub, x, "1")
+    run_a12(dsub, x, "3")
+  }
+}
+```

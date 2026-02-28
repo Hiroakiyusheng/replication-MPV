@@ -1,0 +1,269 @@
+---
+title: "Data Description"
+---
+
+```{r}
+library(data.table)
+library(haven)
+library(knitr)
+
+dir.create("../../../Tables/r", recursive = TRUE, showWarnings = FALSE)
+
+first_existing <- function(paths) {
+  hit <- paths[file.exists(paths)]
+  if (length(hit) == 0) NA_character_ else hit[[1]]
+}
+
+file_meta <- function(path, dataset, role) {
+  ex <- file.exists(path)
+  info <- if (ex) file.info(path) else data.frame(size = NA_real_, mtime = as.POSIXct(NA))
+  data.table(
+    dataset = dataset,
+    role = role,
+    file = path,
+    exists = ex,
+    size_mb = if (ex) round(info$size[[1]] / 1024^2, 2) else NA_real_,
+    modified = if (ex) format(info$mtime[[1]], "%Y-%m-%d %H:%M:%S") else NA_character_
+  )
+}
+
+safe_dict <- function(path, dataset, vars) {
+  if (!file.exists(path)) {
+    return(data.table(
+      dataset = dataset,
+      variable = vars,
+      label = NA_character_,
+      missing_rate = NA_real_,
+      mean = NA_real_,
+      sd = NA_real_,
+      status = "missing_file"
+    ))
+  }
+
+  var_names <- names(read_dta(path, n_max = 0))
+  vars_in <- intersect(vars, var_names)
+  vars_out <- setdiff(vars, var_names)
+
+  out <- list()
+  if (length(vars_in) > 0) {
+    d <- as.data.table(read_dta(path, col_select = vars_in))
+    out[[1]] <- rbindlist(lapply(vars_in, function(v) {
+      x <- d[[v]]
+      lb <- attr(x, "label")
+      data.table(
+        dataset = dataset,
+        variable = v,
+        label = if (is.null(lb) || identical(lb, "")) NA_character_ else as.character(lb),
+        missing_rate = mean(is.na(x)),
+        mean = if (is.numeric(x)) mean(x, na.rm = TRUE) else NA_real_,
+        sd = if (is.numeric(x)) sd(x, na.rm = TRUE) else NA_real_,
+        status = "ok"
+      )
+    }), fill = TRUE)
+  }
+  if (length(vars_out) > 0) {
+    out[[length(out) + 1L]] <- data.table(
+      dataset = dataset,
+      variable = vars_out,
+      label = NA_character_,
+      missing_rate = NA_real_,
+      mean = NA_real_,
+      sd = NA_real_,
+      status = "variable_not_found"
+    )
+  }
+  rbindlist(out, fill = TRUE)
+}
+```
+
+## この章でコードがしていること（1分で把握）
+
+| ステップ | コードでしていること | 主な入力 | 主な出力 |
+|---|---|---|---|
+| 1. データ全体像 | 研究で使うデータ群と利用章を対応づける | 章ごとの利用データ定義 | `data_description_overview.csv` |
+| 2. ファイル在庫確認 | 主要データの存在・容量・更新時刻を機械的に確認する | `raw/`, `data/`配下ファイル | `data_description_inventory.csv` |
+| 3. サンプル記述 | PSID/MSC/CEXの件数・期間・平均値を作る | 各メイン `.dta` | `data_description_samples.csv` |
+| 4. 変数辞書 | 主要変数のラベル・欠損率・基本統計を抽出する | 各メイン `.dta` の選択変数 | `data_description_variables.csv` |
+
+## データ全体像
+
+```{r}
+overview <- data.table(
+  source = c("PSID", "MSC", "CEX", "Nielsen", "Macro controls", "Model simulations"),
+  main_file = c(
+    "data/PSID/psid_new_final_lag_LS.dta",
+    "raw/MSC/ms_all_1953_2018.dta",
+    "data/CEX/CEX_1980_2012.dta",
+    "data/Nielsen/panelist_*_m(.dta)",
+    "raw/unemployment_*.dta, raw/PCEPI.dta",
+    "data/simulations/**/reg_data*.csv"
+  ),
+  used_in = c(
+    "Main Table 1, 2, 4, 5 + PSID Appendix",
+    "Main Table 3",
+    "Appendix A15, A16",
+    "Appendix A13, A14, B17, B18, Figure B4",
+    "PSID/MSC/CEX/Nielsen controls",
+    "Main Table 7, C2"
+  ),
+  note = c(
+    "Table 1-2 の主データ",
+    "Michigan Survey of Consumers",
+    "Consumer Expenditure Survey",
+    "ローカルには一部生成ファイルのみ",
+    "失業率・価格指数などの外生系列",
+    "構造モデルのシミュレーション出力"
+  )
+)
+fwrite(overview, "../../../Tables/r/data_description_overview.csv")
+knitr::kable(overview, caption = "Data Overview and Usage", format = "html", digits = 3)
+```
+
+## 主要ファイルの存在確認
+
+```{r}
+panel_totalexp_candidate <- "../../../data/Nielsen/panelist_totalexp_m.dta"
+panel_storerank_candidate <- "../../../data/Nielsen/panelist_storerank_m.dta"
+panel_goodrank_candidate <- "../../../data/Nielsen/panelist_goodrank_m.dta"
+
+panel_totalexp_path <- first_existing(c(panel_totalexp_candidate, "../../../data/Nielsen/panelist_totalexp_m"))
+panel_storerank_path <- first_existing(c(panel_storerank_candidate, "../../../data/Nielsen/panelist_storerank_m"))
+panel_goodrank_path <- first_existing(c(panel_goodrank_candidate, "../../../data/Nielsen/panelist_goodrank_m"))
+
+inventory <- rbindlist(list(
+  file_meta("../../../data/PSID/psid_new_final_lag_LS.dta", "PSID", "main processed"),
+  file_meta("../../../raw/PSID/psid_new_everyone.dta", "PSID", "raw merged"),
+  file_meta("../../../raw/MSC/ms_all_1953_2018.dta", "MSC", "raw survey"),
+  file_meta("../../../data/MSC/generated_years_lag.dta", "MSC", "generated cohort-year"),
+  file_meta("../../../data/CEX/CEX_1980_2012.dta", "CEX", "main processed"),
+  file_meta("../../../data/CEX/generated_quarters_lag.dta", "CEX", "generated cohort-quarter"),
+  file_meta("../../../data/Nielsen/generated_months_lag.dta", "Nielsen", "generated cohort-month"),
+  file_meta(if (is.na(panel_totalexp_path)) panel_totalexp_candidate else panel_totalexp_path, "Nielsen", "panelist_totalexp_m"),
+  file_meta(if (is.na(panel_storerank_path)) panel_storerank_candidate else panel_storerank_path, "Nielsen", "panelist_storerank_m"),
+  file_meta(if (is.na(panel_goodrank_path)) panel_goodrank_candidate else panel_goodrank_path, "Nielsen", "panelist_goodrank_m"),
+  file_meta("../../../raw/unemployment_raw_q.dta", "Macro", "quarterly unemployment"),
+  file_meta("../../../raw/unemployment_raw_m.dta", "Macro", "monthly unemployment"),
+  file_meta("../../../raw/nat_UE_1890_2017.dta", "Macro", "annual unemployment"),
+  file_meta("../../../raw/PCEPI.dta", "Macro", "price index")
+), fill = TRUE)
+
+fwrite(inventory, "../../../Tables/r/data_description_inventory.csv")
+knitr::kable(inventory, caption = "File Inventory and Availability", format = "html", digits = 3)
+```
+
+## サンプル記述
+
+```{r}
+sample_rows <- list()
+
+# PSID
+psid_path <- "../../../data/PSID/psid_new_final_lag_LS.dta"
+if (file.exists(psid_path)) {
+  psid <- as.data.table(read_dta(psid_path, col_select = c("ID", "year", "age", "tag_10_90", "total", "income")))
+  psid[, num := .N, by = ID]
+  psid_main <- psid[tag_10_90 == 1 & num > 1]
+
+  sample_rows[[length(sample_rows) + 1L]] <- data.table(
+    dataset = "PSID",
+    sample = "full (psid_new_final_lag_LS)",
+    n_obs = nrow(psid),
+    n_units = uniqueN(psid$ID),
+    year_min = min(psid$year, na.rm = TRUE),
+    year_max = max(psid$year, na.rm = TRUE),
+    age_mean = mean(psid$age, na.rm = TRUE),
+    main_outcome_mean = mean(psid$total, na.rm = TRUE)
+  )
+  sample_rows[[length(sample_rows) + 1L]] <- data.table(
+    dataset = "PSID",
+    sample = "analysis (tag_10_90==1, num>1)",
+    n_obs = nrow(psid_main),
+    n_units = uniqueN(psid_main$ID),
+    year_min = min(psid_main$year, na.rm = TRUE),
+    year_max = max(psid_main$year, na.rm = TRUE),
+    age_mean = mean(psid_main$age, na.rm = TRUE),
+    main_outcome_mean = mean(psid_main$total, na.rm = TRUE)
+  )
+} else {
+  sample_rows[[length(sample_rows) + 1L]] <- data.table(
+    dataset = "PSID", sample = "missing", n_obs = NA_integer_, n_units = NA_integer_,
+    year_min = NA_real_, year_max = NA_real_, age_mean = NA_real_, main_outcome_mean = NA_real_
+  )
+}
+
+# MSC
+msc_path <- "../../../raw/MSC/ms_all_1953_2018.dta"
+if (file.exists(msc_path)) {
+  msc <- as.data.table(read_dta(msc_path, col_select = c("yyyy", "age", "income", "pexp")))
+  msc <- msc[age >= 18]
+  sample_rows[[length(sample_rows) + 1L]] <- data.table(
+    dataset = "MSC",
+    sample = "adults (age>=18)",
+    n_obs = nrow(msc),
+    n_units = NA_integer_,
+    year_min = min(msc$yyyy, na.rm = TRUE),
+    year_max = max(msc$yyyy, na.rm = TRUE),
+    age_mean = mean(msc$age, na.rm = TRUE),
+    main_outcome_mean = mean(msc$pexp == 3, na.rm = TRUE)
+  )
+}
+
+# CEX
+cex_path <- "../../../data/CEX/CEX_1980_2012.dta"
+if (file.exists(cex_path)) {
+  cex <- as.data.table(read_dta(cex_path, col_select = c("survey_year", "hh_age", "total_income", "total_consumption")))
+  cex <- cex[total_income >= 2000]
+  sample_rows[[length(sample_rows) + 1L]] <- data.table(
+    dataset = "CEX",
+    sample = "income>=2000",
+    n_obs = nrow(cex),
+    n_units = NA_integer_,
+    year_min = min(cex$survey_year, na.rm = TRUE),
+    year_max = max(cex$survey_year, na.rm = TRUE),
+    age_mean = mean(cex$hh_age, na.rm = TRUE),
+    main_outcome_mean = mean(log(cex$total_consumption), na.rm = TRUE)
+  )
+}
+
+sample_desc <- rbindlist(sample_rows, fill = TRUE)
+fwrite(sample_desc, "../../../Tables/r/data_description_samples.csv")
+knitr::kable(sample_desc, digits = 3, caption = "Sample Description (core datasets)", format = "html")
+```
+
+```{r}
+sim_files <- list.files("../../../data/simulations", pattern = "reg_data.*\\.csv$", recursive = TRUE, full.names = TRUE)
+sim_desc <- data.table(
+  item = c("simulation_csv_files", "scenarios_found"),
+  value = c(length(sim_files), uniqueN(dirname(sim_files)))
+)
+fwrite(sim_desc, "../../../Tables/r/data_description_simulations.csv")
+knitr::kable(sim_desc, caption = "Model Simulation File Summary", format = "html", digits = 3)
+```
+
+## 主要変数の description
+
+```{r}
+psid_vars <- c("total", "income", "exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3", "LIQUID_WEALTH", "ILLIQUID_WEALTH", "FAM_NUM_TOTAL")
+msc_vars <- c("pexp", "dur", "income", "age", "bexp", "wt")
+cex_vars <- c("total_consumption", "consumption_nondurables", "total_income", "experience_lambda1_lag", "hh_age", "family_size")
+
+dict <- rbindlist(list(
+  safe_dict("../../../data/PSID/psid_new_final_lag_LS.dta", "PSID", psid_vars),
+  safe_dict("../../../raw/MSC/ms_all_1953_2018.dta", "MSC", msc_vars),
+  safe_dict("../../../data/CEX/CEX_1980_2012.dta", "CEX", cex_vars)
+), fill = TRUE)
+
+dict[, `:=`(
+  missing_rate = round(missing_rate, 3),
+  mean = round(mean, 3),
+  sd = round(sd, 3)
+)]
+
+fwrite(dict, "../../../Tables/r/data_description_variables.csv")
+knitr::kable(dict, caption = "Variable Dictionary (labels + missingness)", format = "html", digits = 3)
+```
+
+## メモ
+
+- Table 1-2 の再現でメインに使っているデータは `data/PSID/psid_new_final_lag_LS.dta` です。
+- Nielsen の `panelist_*` ファイルは、ローカルで未配置の場合に Appendix Nielsen 章が `skipped` 表示になります。
+- この章の出力は `Tables/r/data_description_*.csv` に保存されます。

@@ -1,0 +1,295 @@
+---
+title: "Appendix: PSID (A1, A2, A3, A5, A6, A8, A9, A10, A11, Figure A1)"
+---
+
+```{r}
+library(data.table)
+library(haven)
+library(fixest)
+library(ggplot2)
+library(knitr)
+
+dir.create("../../../Tables/r", recursive = TRUE, showWarnings = FALSE)
+dir.create("../../../Figures/r", recursive = TRUE, showWarnings = FALSE)
+
+extract_fixest_terms <- function(m, keep, model_id) {
+  ct <- as.data.table(coeftable(m), keep.rownames = "term")
+  if ("Estimate" %in% names(ct)) setnames(ct, "Estimate", "estimate")
+  if ("Std. Error" %in% names(ct)) setnames(ct, "Std. Error", "std_error")
+  if ("t value" %in% names(ct)) setnames(ct, "t value", "stat")
+  if ("z value" %in% names(ct)) setnames(ct, "z value", "stat")
+  if ("Pr(>|t|)" %in% names(ct)) setnames(ct, "Pr(>|t|)", "p_value")
+  if ("Pr(>|z|)" %in% names(ct)) setnames(ct, "Pr(>|z|)", "p_value")
+  if (!("estimate" %in% names(ct))) ct[, estimate := NA_real_]
+  if (!("std_error" %in% names(ct))) ct[, std_error := NA_real_]
+  if (!("stat" %in% names(ct))) ct[, stat := NA_real_]
+  if (!("p_value" %in% names(ct))) ct[, p_value := NA_real_]
+  ct <- ct[term %in% keep, .(model = model_id, term, estimate, std_error, stat, p_value)]
+  ct
+}
+
+save_models <- function(models, keep, stem, caption = stem) {
+  tab <- rbindlist(lapply(seq_along(models), function(i) extract_fixest_terms(models[[i]], keep, paste0("M", i))), fill = TRUE)
+  tab[, term := factor(term, levels = keep)]
+  setorder(tab, term, model)
+  tab[, term := as.character(term)]
+  fwrite(tab, sprintf("../../../Tables/r/%s.csv", stem))
+  tex <- knitr::kable(tab, format = "latex", booktabs = TRUE, caption = caption, digits = 3)
+  writeLines(tex, sprintf("../../../Tables/r/%s.tex", stem))
+  knitr::kable(tab, caption = caption, format = "html", digits = 3)
+}
+
+make_sample <- function(d, tagged = TRUE) {
+  x <- copy(d)
+  setorder(x, ID, year)
+  x[, num := .N, by = ID]
+  if (tagged) x <- x[tag_10_90 == 1]
+  x[num > 1]
+}
+
+psid <- as.data.table(read_dta("../../../data/PSID/psid_new_final_lag_LS.dta"))
+ctrl <- "income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2"
+base_rhs <- paste("GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state +", ctrl, "+ i(HD_RACE) + i(HEAD_EDU)")
+```
+
+## この章でコードがしていること（1分で把握）
+
+| セクション | コードでしていること | 主な入力 | 主な出力 |
+|---|---|---|---|
+| A1 | フルサンプルの要約統計を作る | `psid_new_final_lag_LS.dta` | `table_A1_r.csv` |
+| A2/A3/A5/A6 | サンプル定義・経験定義・クラスタリング・重みの頑健性回帰を推定する | 同上 | `table_A2_r.*` 〜 `table_A6_r.*` |
+| A8/A9/A10/A11 | 追加統制・測定誤差・流動性相互作用の頑健性回帰を推定する | 同上 | `table_A8_r.*` 〜 `table_A11_r.*` |
+| Figure A1 | 失職イベント前後の所得イベントスタディ係数を算出・描画する | 同上 | `figure_A1_coeff_r.csv`, `figure_A1_r.pdf` |
+
+## A1 (Summary: full sample)
+
+```{r}
+a1 <- make_sample(psid, tagged = FALSE)
+a1[, `:=`(
+  Unempl_Exp_Personal_lambda1 = exp_personal_lagged_1 * 100,
+  Unempl_Exp_Personal_lambda3 = exp_personal_nat_l3 * 100
+)]
+vars <- c(
+  "age", "FAM_NUM_TOTAL", "TOTAL_CONSUMP1", "INCOME_TOTAL_FAM",
+  "LIQUID_WEALTH", "ILLIQUID_WEALTH", "WEALTH_TOTAL",
+  "Unempl_Exp_Personal_lambda1", "Unempl_Exp_Personal_lambda3",
+  "exp_state_nat_lagged_1", "exp_state_nat_lagged_l3"
+)
+summ <- rbindlist(lapply(vars, function(v) {
+  x <- a1[[v]]
+  data.table(variable = v, mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE), p10 = quantile(x, 0.1, na.rm = TRUE), p50 = quantile(x, 0.5, na.rm = TRUE), p90 = quantile(x, 0.9, na.rm = TRUE), N = sum(!is.na(x)))
+}))
+fwrite(summ, "../../../Tables/r/table_A1_r.csv")
+knitr::kable(summ, caption = "Table A1 (R): Summary Statistics (Full Sample)", format = "html", digits = 3)
+```
+
+## A2, A3, A5, A6
+
+```{r}
+a <- make_sample(psid, tagged = FALSE)
+a_tag <- make_sample(psid, tagged = TRUE)
+
+# A2
+a2 <- list(
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_1 + exp_personal_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + %s | age + GSA + year + ID", base_rhs)), a, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", base_rhs)), a, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_l3 + exp_personal_nat_l3 + %s | age + GSA + year + ID", base_rhs)), a, vcov = ~cohort)
+)
+save_models(
+  a2,
+  keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3"),
+  stem = "table_A2_r",
+  caption = "Table A2 (R): Full Sample"
+)
+
+# A3
+a3 <- list(
+  feols(as.formula(sprintf("total ~ exp_personal_nat_1g + %s | age + GSA + year + ID", base_rhs)), a_tag, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_1g + %s | age + GSA + year + ID", base_rhs)), a_tag, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_1g + exp_personal_nat_1g + %s | age + GSA + year + ID", base_rhs)), a_tag, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_3g + %s | age + GSA + year + ID", base_rhs)), a_tag, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_3g + %s | age + GSA + year + ID", base_rhs)), a_tag, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_3g + exp_personal_nat_3g + %s | age + GSA + year + ID", base_rhs)), a_tag, vcov = ~cohort)
+)
+save_models(
+  a3,
+  keep = c("exp_personal_nat_1g", "exp_state_nat_lagged_1g", "exp_personal_nat_3g", "exp_state_nat_lagged_3g"),
+  stem = "table_A3_r",
+  caption = "Table A3 (R): Gap-Year Experience"
+)
+
+# A5
+a5 <- list(
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a_tag, vcov = ~cohort + year),
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a_tag, vcov = ~ID),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", base_rhs)), a_tag, vcov = ~cohort + year),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", base_rhs)), a_tag, vcov = ~ID)
+)
+save_models(
+  a5,
+  keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3"),
+  stem = "table_A5_r",
+  caption = "Table A5 (R): Alternative Clustering"
+)
+
+# A6 (コード上は重みなし推定)
+a6 <- copy(psid)
+a6 <- a6[FAM_WEIGHT_CI != 0]
+a6[, idn := .N, by = ID]
+a6 <- a6[idn > 1]
+a6 <- make_sample(a6, tagged = TRUE)
+a6m <- list(
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a6, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a6, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_1 + exp_personal_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a6, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + %s | age + GSA + year + ID", base_rhs)), a6, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", base_rhs)), a6, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_l3 + exp_personal_nat_l3 + %s | age + GSA + year + ID", base_rhs)), a6, vcov = ~cohort)
+)
+save_models(
+  a6m,
+  keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3"),
+  stem = "table_A6_r",
+  caption = "Table A6 (R): Alternative Weights Sample"
+)
+```
+
+## A8, A9, A10, A11
+
+```{r}
+a8 <- make_sample(psid, tagged = TRUE)
+
+ctrl1 <- "income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + liquid3 + liquid4 + illiquid_wealth + illiquid2 + illiquid3 + illiquid4"
+ctrl2 <- "i(liquid_q10_10_90) + i(illiquid_q10_10_90) + income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2"
+ctrl3 <- "income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2 + housing + other"
+ctrl4 <- "income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2 + wealth_db + total_debt"
+
+a8m <- list(
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl1)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl2)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl3)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl1)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl2)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl3)), a8, vcov = ~cohort)
+)
+save_models(
+  a8m,
+  keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3"),
+  stem = "table_A8_r",
+  caption = "Table A8 (R): Additional Wealth Controls"
+)
+
+ctrl9_1 <- "income + income2 + income3 + income4 + l1_income + l1_income2 + l1_income3 + l1_income4 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2"
+ctrl9_2 <- "i(l1_income_q5_10_90) + i(income_q5_10_90) + income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2"
+ctrl9_3 <- "i(l1_income_q10_10_90) + i(income_q10_10_90) + income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2"
+ctrl9_4 <- "i(xinc) + i(xl1inc) + income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2"
+a9m <- list(
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl9_1)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl9_2)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl9_3)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl9_4)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl9_1)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl9_2)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl9_3)), a8, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl9_4)), a8, vcov = ~cohort)
+)
+save_models(
+  a9m,
+  keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3"),
+  stem = "table_A9_r",
+  caption = "Table A9 (R): Additional Income Controls"
+)
+
+set.seed(12345)
+a10 <- copy(a8)
+sigma_income <- sd(a10$income, na.rm = TRUE)
+eps <- rnorm(nrow(a10), 0, 0.2 * sigma_income)
+a10[, `:=`(income = income + eps, l1_income = l1_income + eps)]
+a10[, `:=`(income2 = income^2, l1_income2 = l1_income^2)]
+a10m <- list(
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a10, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a10, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | age + GSA + year + ID", base_rhs)), a10, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + %s | age + GSA + year + ID", base_rhs)), a10, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", base_rhs)), a10, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", base_rhs)), a10, vcov = ~cohort)
+)
+save_models(
+  a10m,
+  keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3"),
+  stem = "table_A10_r",
+  caption = "Table A10 (R): Measurement Error in Income"
+)
+
+a11 <- copy(a8)
+a11[, `:=`(
+  pexp_wealth = exp_personal_lagged_1 * liquid_wealth_low,
+  mexp_wealth = exp_state_nat_lagged_1 * liquid_wealth_low
+)]
+a11m <- list(
+  feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + pexp_wealth + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + liquid_wealth_low + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl)), a11, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_1 + mexp_wealth + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + liquid_wealth_low + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl)), a11, vcov = ~cohort),
+  feols(as.formula(sprintf("total ~ exp_state_nat_lagged_1 + mexp_wealth + exp_personal_lagged_1 + pexp_wealth + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + liquid_wealth_low + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl)), a11, vcov = ~cohort)
+)
+a11[, `:=`(
+  pexp_wealth = exp_personal_nat_l3 * liquid_wealth_low,
+  mexp_wealth = exp_state_nat_lagged_l3 * liquid_wealth_low
+)]
+a11m <- c(
+  a11m,
+  list(
+    feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + pexp_wealth + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + liquid_wealth_low + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl)), a11, vcov = ~cohort),
+    feols(as.formula(sprintf("total ~ exp_state_nat_lagged_l3 + mexp_wealth + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + liquid_wealth_low + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl)), a11, vcov = ~cohort),
+    feols(as.formula(sprintf("total ~ exp_state_nat_lagged_l3 + mexp_wealth + exp_personal_nat_l3 + pexp_wealth + GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state + %s + liquid_wealth_low + i(HD_RACE) + i(HEAD_EDU) | age + GSA + year + ID", ctrl)), a11, vcov = ~cohort)
+  )
+)
+save_models(
+  a11m,
+  keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3", "pexp_wealth", "mexp_wealth", "liquid_wealth_low"),
+  stem = "table_A11_r",
+  caption = "Table A11 (R): Liquidity Interaction"
+)
+```
+
+## Figure A1
+
+```{r}
+fa <- make_sample(psid, tagged = FALSE)
+setorder(fa, ID, year)
+fa[, event_date := as.integer(EMPLOY_STATUS == 3)]
+for (k in 1:7) fa[, paste0("F", k) := as.integer(shift(event_date, n = k, type = "lag") == 1L), by = ID]
+for (k in 0:5) fa[, paste0("L", k) := as.integer(shift(event_date, n = k, type = "lead") == 1L), by = ID]
+for (k in c(paste0("F", 1:7), paste0("L", 0:5))) fa[is.na(get(k)), (k) := 0L]
+
+form <- as.formula(paste(
+  "income ~", paste(c("L5", "L4", "L3", "L2", "L1", "L0", "F1", "F2", "F3", "F4", "F5", "F6", "F7",
+                     "GENDER", "HEAD_MARITAL", "i(HD_RACE)", "i(HEAD_EDU)", "age"), collapse = " + "),
+  "| ID + year"
+))
+mfa <- feols(form, fa, vcov = ~ID)
+ct <- as.data.table(coeftable(mfa), keep.rownames = "term")
+ct <- ct[term %in% c("L5","L4","L3","L2","L1","L0","F1","F2","F3","F4","F5","F6","F7")]
+ct[, displacement := fifelse(grepl("^L", term), -as.integer(sub("L", "", term)), as.integer(sub("F", "", term)))]
+ct[, `:=`(lb = Estimate - 1.96 * `Std. Error`, ub = Estimate + 1.96 * `Std. Error`)]
+setorder(ct, displacement)
+fwrite(ct, "../../../Figures/r/figure_A1_coeff_r.csv")
+knitr::kable(
+  ct[, .(term, Estimate, `Std. Error`, displacement, lb, ub)],
+  caption = "Figure A1 (R): Event-Study Coefficients",
+  format = "html",
+  digits = 3
+)
+
+p <- ggplot(ct[displacement >= -5], aes(displacement, Estimate)) +
+  geom_hline(yintercept = 0, color = "gray50") +
+  geom_vline(xintercept = 0, color = "gray50") +
+  geom_errorbar(aes(ymin = lb, ymax = ub), width = 0.15) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Years since displacement", y = "Estimation Coefficient")
+ggsave("../../../Figures/r/figure_A1_r.pdf", p, width = 7, height = 4.5)
+p
+```

@@ -1,0 +1,198 @@
+---
+title: "Main: PSID (Table 1, 2, 4, 5)"
+---
+
+```{r}
+library(data.table)
+library(haven)
+library(fixest)
+library(knitr)
+
+dir.create("../../../Tables/r", recursive = TRUE, showWarnings = FALSE)
+
+fallback_shift <- function(x, year, k) {
+  steps <- seq(abs(k), 1)
+  dir <- sign(k)
+  idx_mat <- do.call(cbind, lapply(steps, function(s) match(year + dir * s, year)))
+  if (is.null(dim(idx_mat))) idx_mat <- matrix(idx_mat, nrow = length(year), ncol = 1)
+  out <- rep(NA_real_, length(x))
+  for (j in seq_len(ncol(idx_mat))) {
+    m <- idx_mat[, j]
+    pick <- is.na(out) & !is.na(m)
+    out[pick] <- x[m[pick]]
+  }
+  out
+}
+
+save_models <- function(models, keep, stem, caption = stem) {
+  tab <- as.data.table(etable(models, keep = keep, tex = FALSE, digits = 3))
+  fwrite(tab, sprintf("../../../Tables/r/%s.csv", stem))
+  etable(models, keep = keep, tex = TRUE, digits = 3, file = sprintf("../../../Tables/r/%s.tex", stem))
+  knitr::kable(tab, caption = caption, format = "html", digits = 3)
+}
+
+psid <- as.data.table(read_dta("../../../data/PSID/psid_new_final_lag_LS.dta"))
+setorder(psid, ID, year)
+psid[, num := .N, by = ID]
+psid_main <- psid[tag_10_90 == 1 & num > 1]
+```
+
+## この章でコードがしていること（1分で把握）
+
+| セクション | コードでしていること | 主な入力 | 主な出力 |
+|---|---|---|---|
+| Table 1 | PSID分析サンプルの要約統計（平均・分散・分位点）を作る | `psid_new_final_lag_LS.dta` | `table_1_r.csv` |
+| Table 2 | 経験変数と消費の固定効果回帰を推定する | PSID分析サンプル | `table_2_r.csv`, `table_2_r.tex` |
+| Table 4 | 将来所得（2〜6年先）への経験効果を推定する | PSID分析サンプル | `table_4_r.csv`, `table_4_r.tex` |
+| Table 5 | 所得ショック由来の将来分散指標を作って回帰する | PSID分析サンプル | `table_5_lambda1_r.*`, `table_5_lambda3_r.*` |
+
+## Table 1
+
+```{r}
+t1 <- copy(psid_main)
+t1[, `:=`(
+  Unempl_Exp_Personal_lambda1 = exp_personal_lagged_1 * 100,
+  Unempl_Exp_Personal_lambda3 = exp_personal_nat_l3 * 100
+)]
+
+vars <- c(
+  "age", "FAM_NUM_TOTAL", "TOTAL_CONSUMP1", "INCOME_TOTAL_FAM",
+  "LIQUID_WEALTH", "ILLIQUID_WEALTH", "WEALTH_TOTAL",
+  "Unempl_Exp_Personal_lambda1", "Unempl_Exp_Personal_lambda3",
+  "exp_state_nat_lagged_1", "exp_state_nat_lagged_l3"
+)
+
+summ <- rbindlist(lapply(vars, function(v) {
+  x <- t1[[v]]
+  data.table(
+    variable = v,
+    mean = mean(x, na.rm = TRUE),
+    sd = sd(x, na.rm = TRUE),
+    p10 = quantile(x, 0.10, na.rm = TRUE),
+    p50 = quantile(x, 0.50, na.rm = TRUE),
+    p90 = quantile(x, 0.90, na.rm = TRUE),
+    N = sum(!is.na(x))
+  )
+}))
+fwrite(summ, "../../../Tables/r/table_1_r.csv")
+knitr::kable(summ, caption = "Table 1 (R): Summary Statistics (PSID)", format = "html", digits = 3)
+```
+
+## Table 2
+
+```{r}
+ctrl <- "income + income2 + l1_income + l1_income2 + liquid_wealth + liquid2 + illiquid_wealth + illiquid2"
+rhs_base <- paste(
+  "GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + unemp_state +",
+  ctrl,
+  "+ i(HD_RACE) + i(HEAD_EDU)"
+)
+
+m1 <- feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + %s | age + GSA + year + ID", rhs_base)), psid_main, vcov = ~cohort)
+m2 <- feols(as.formula(sprintf("total ~ exp_state_nat_lagged_1 + %s | age + GSA + year + ID", rhs_base)), psid_main, vcov = ~cohort)
+m3 <- feols(as.formula(sprintf("total ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | age + GSA + year + ID", rhs_base)), psid_main, vcov = ~cohort)
+m4 <- feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + %s | age + GSA + year + ID", rhs_base)), psid_main, vcov = ~cohort)
+m5 <- feols(as.formula(sprintf("total ~ exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", rhs_base)), psid_main, vcov = ~cohort)
+m6 <- feols(as.formula(sprintf("total ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", rhs_base)), psid_main, vcov = ~cohort)
+
+save_models(
+  list(m1, m2, m3, m4, m5, m6),
+  keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3"),
+  stem = "table_2_r",
+  caption = "Table 2 (R): Experience Effects and Consumption"
+)
+```
+
+## Table 4
+
+```{r}
+t4 <- copy(psid_main)
+t4[, seq := seq_len(.N), by = ID]
+t4[, `:=`(
+  f2_income = shift(income, 2, type = "lead"),
+  f3_income = shift(income, 3, type = "lead"),
+  f4_income = shift(income, 4, type = "lead"),
+  f5_income = shift(income, 5, type = "lead"),
+  f6_income = shift(income, 6, type = "lead")
+), by = ID]
+
+t4_1 <- feols(as.formula(sprintf("f2_income ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | ID + age + GSA + year", rhs_base)), t4, vcov = ~cohort)
+t4_2 <- feols(as.formula(sprintf("f3_income ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | ID + age + GSA + year", rhs_base)), t4, vcov = ~cohort)
+t4_3 <- feols(as.formula(sprintf("f4_income ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | ID + age + GSA + year", rhs_base)), t4, vcov = ~cohort)
+t4_4 <- feols(as.formula(sprintf("f5_income ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | ID + age + GSA + year", rhs_base)), t4, vcov = ~cohort)
+t4_5 <- feols(as.formula(sprintf("f6_income ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | ID + age + GSA + year", rhs_base)), t4, vcov = ~cohort)
+t4_6 <- feols(as.formula(sprintf("f2_income ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | ID + age + GSA + year", rhs_base)), t4, vcov = ~cohort)
+t4_7 <- feols(as.formula(sprintf("f3_income ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | ID + age + GSA + year", rhs_base)), t4, vcov = ~cohort)
+t4_8 <- feols(as.formula(sprintf("f4_income ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | ID + age + GSA + year", rhs_base)), t4, vcov = ~cohort)
+t4_9 <- feols(as.formula(sprintf("f5_income ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | ID + age + GSA + year", rhs_base)), t4, vcov = ~cohort)
+t4_10 <- feols(as.formula(sprintf("f6_income ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | ID + age + GSA + year", rhs_base)), t4, vcov = ~cohort)
+
+save_models(
+  list(t4_1, t4_2, t4_3, t4_4, t4_5, t4_6, t4_7, t4_8, t4_9, t4_10),
+  keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1", "exp_personal_nat_l3", "exp_state_nat_lagged_l3"),
+  stem = "table_4_r",
+  caption = "Table 4 (R): Experience Effects and Future Income"
+)
+```
+
+## Table 5
+
+```{r}
+t5 <- copy(psid_main)
+t5[, min_income := min(INCOME_TOTAL_FAM, na.rm = TRUE)]
+t5[, positive_min_income := INCOME_TOTAL_FAM - min_income + 0.1]
+t5[, log_positive_min_income := log(positive_min_income)]
+
+m_res <- feols(
+  log_positive_min_income ~ GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP + liquid_wealth + illiquid_wealth + i(HD_RACE) + i(HEAD_EDU) | age + region_year + GSA,
+  t5,
+  vcov = ~cohort
+)
+t5[, excess_l1_income := resid(m_res)]
+
+t5[, excess_l1_income_lead2 := fallback_shift(excess_l1_income, year, 2), by = ID]
+t5[, excess_l1_income_lag4 := fallback_shift(excess_l1_income, year, -4), by = ID]
+t5[, excess_l1_income_lag2 := fallback_shift(excess_l1_income, year, -2), by = ID]
+t5[, twolagchange := excess_l1_income - excess_l1_income_lag2]
+t5[, sixlagchange := excess_l1_income_lead2 - excess_l1_income_lag4]
+t5[, permanent_change := twolagchange * sixlagchange]
+t5[, square_change := twolagchange^2]
+t5[, f2_permanent_change := fallback_shift(permanent_change, year, 2), by = ID]
+t5[, f4_permanent_change := fallback_shift(permanent_change, year, 4), by = ID]
+t5[, f6_permanent_change := fallback_shift(permanent_change, year, 6), by = ID]
+t5[, f2_square_change := fallback_shift(square_change, year, 2), by = ID]
+t5[, f4_square_change := fallback_shift(square_change, year, 4), by = ID]
+t5[, f6_square_change := fallback_shift(square_change, year, 6), by = ID]
+
+rhs_t5 <- paste(
+  "GENDER + FAM_NUM_TOTAL + HEAD_MARITAL + UNEMP +",
+  ctrl,
+  "+ i(HD_RACE) + i(HEAD_EDU)"
+)
+
+t5_1 <- feols(as.formula(sprintf("f2_permanent_change ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_2 <- feols(as.formula(sprintf("f2_square_change ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_3 <- feols(as.formula(sprintf("f4_permanent_change ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_4 <- feols(as.formula(sprintf("f4_square_change ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_5 <- feols(as.formula(sprintf("f6_permanent_change ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_6 <- feols(as.formula(sprintf("f6_square_change ~ exp_personal_lagged_1 + exp_state_nat_lagged_1 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_7 <- feols(as.formula(sprintf("f2_permanent_change ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_8 <- feols(as.formula(sprintf("f2_square_change ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_9 <- feols(as.formula(sprintf("f4_permanent_change ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_10 <- feols(as.formula(sprintf("f4_square_change ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_11 <- feols(as.formula(sprintf("f6_permanent_change ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+t5_12 <- feols(as.formula(sprintf("f6_square_change ~ exp_personal_nat_l3 + exp_state_nat_lagged_l3 + %s | age + GSA + year + ID", rhs_t5)), t5, vcov = ~cohort)
+
+save_models(
+  list(t5_1, t5_2, t5_3, t5_4, t5_5, t5_6),
+  keep = c("exp_personal_lagged_1", "exp_state_nat_lagged_1"),
+  stem = "table_5_lambda1_r",
+  caption = "Table 5 (R): Future Income Volatility (lambda=1)"
+)
+save_models(
+  list(t5_7, t5_8, t5_9, t5_10, t5_11, t5_12),
+  keep = c("exp_personal_nat_l3", "exp_state_nat_lagged_l3"),
+  stem = "table_5_lambda3_r",
+  caption = "Table 5 (R): Future Income Volatility (lambda=3)"
+)
+```

@@ -1,0 +1,27 @@
+project:
+  type: book
+
+book:
+  title: "Scarred Consumption Replication in R"
+  author: "Replication Notes"
+  chapters:
+    - index.qmd
+    - 00-data-description.qmd
+    - 01-main-psid.qmd
+    - 02-main-msc.qmd
+    - 03-main-model.qmd
+    - 04-appendix-psid.qmd
+    - 05-appendix-cex.qmd
+    - 06-advanced-notes.qmd
+    - 07-appendix-nielsen.qmd
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: false
+
+execute:
+  echo: true
+  warning: false
+  message: false

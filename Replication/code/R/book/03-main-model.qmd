@@ -1,0 +1,74 @@
+---
+title: "Main: Model Simulation (Table 7, C2)"
+---
+
+```{r}
+library(data.table)
+library(fixest)
+library(knitr)
+
+dir.create("../../../Tables/r", recursive = TRUE, showWarnings = FALSE)
+
+save_models <- function(models, keep, stem, caption = stem) {
+  tab <- as.data.table(etable(models, keep = keep, tex = FALSE, digits = 3))
+  fwrite(tab, sprintf("../../../Tables/r/%s.csv", stem))
+  etable(models, keep = keep, tex = TRUE, digits = 3, file = sprintf("../../../Tables/r/%s.tex", stem))
+  knitr::kable(tab, caption = caption, format = "html", digits = 3)
+}
+
+load_sim <- function(w, x, y) {
+  low <- fread(sprintf("../../../data/simulations/%s/low_educ/%s%s.csv", w, x, y))
+  high <- fread(sprintf("../../../data/simulations/%s/high_educ/%s%s.csv", w, x, y))
+  low[, educ := 0]
+  high[, educ := 1]
+  d <- rbind(low, high, fill = TRUE)
+  d <- d[!(id > 7000 & educ == 0)]
+  d <- d[!(id <= 7000 & educ == 1)]
+  d <- d[period <= 160]
+  d[, `:=`(
+    consumption = log(consumption),
+    assets = log(assets),
+    income = log(income)
+  )]
+  d[]
+}
+```
+
+## この章でコードがしていること（1分で把握）
+
+| セクション | コードでしていること | 主な入力 | 主な出力 |
+|---|---|---|---|
+| Table 7 | シミュレーション（2仕様×2行動仮定×2λ）を走査し、消費回帰を一括推定する | `data/simulations/**/reg_data*.csv` | `table_7_r.csv`, `table_7_r.tex` |
+| Table C2 | 同シミュレーションから将来所得（8〜40期先）への係数を推定する | `consumption_scarring/reg_data-beh_1.csv` 系 | `table_c2_r.csv`, `table_c2_r.tex` |
+
+## Table 7
+
+```{r}
+mods <- list()
+k <- 1L
+for (y in c("1", "3")) {
+  for (w in c("straight_pistaferri", "consumption_scarring")) {
+    for (x in c("reg_data_", "reg_data-beh_")) {
+      d <- load_sim(w, x, y)
+      mods[[k]] <- feols(consumption ~ income + p_delta | period + educ, d, vcov = ~period); k <- k + 1L
+      mods[[k]] <- feols(consumption ~ assets + income + p_delta | period + educ, d, vcov = ~period); k <- k + 1L
+    }
+  }
+}
+save_models(mods, keep = c("income", "assets", "p_delta"), stem = "table_7_r", caption = "Table 7 (R): Model Simulation Regressions")
+```
+
+## Table C2
+
+```{r}
+d <- load_sim("consumption_scarring", "reg_data-beh_", "1")
+setorder(d, id, period)
+for (h in seq(8, 40, by = 8)) {
+  d[, paste0("f", h, "_income") := shift(income, h, type = "lead"), by = id]
+}
+
+mods_c2 <- lapply(seq(8, 40, by = 8), function(h) {
+  feols(as.formula(sprintf("f%d_income ~ p_delta + income + assets | period + educ", h)), d, vcov = ~period)
+})
+save_models(mods_c2, keep = "p_delta", stem = "table_c2_r", caption = "Table C2 (R): Future Income vs Experience")
+```

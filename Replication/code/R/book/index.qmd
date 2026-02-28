@@ -1,0 +1,25 @@
+---
+title: "Overview"
+---
+
+# 目的
+
+この Quarto book は、`Replication/code/*.do` の主要推定を R で再現するための章立て実装です。
+各章の冒頭に「この章でコードがしていること（1分で把握）」を置き、`入力 -> 処理 -> 出力` を一目で確認できるようにしています。
+
+- Main
+  - PSID: Table 1, 2, 4, 5
+  - MSC: Table 3
+  - Model: Table 7, C2
+- Appendix
+  - PSID: A1, A2, A3, A5, A6, A8, A9, A10, A11, Figure A1
+  - CEX: A15, A16
+
+# 実行方法
+
+```bash
+cd /Users/habuhiroaki/Documents/replication-Malmendier_Shen_2024_AEJMacro/Replication/code/R/book
+quarto render
+```
+
+出力テーブルは `../../../Tables/r/` に保存します。
