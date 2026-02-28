@@ -1,0 +1,15 @@
+dataset,role,file,exists,size_mb,modified
+PSID,main processed,../../../data/PSID/psid_new_final_lag_LS.dta,TRUE,85.05,2026-02-25 10:25:28
+PSID,raw merged,../../../raw/PSID/psid_new_everyone.dta,TRUE,962.49,2026-02-25 10:26:50
+MSC,raw survey,../../../raw/MSC/ms_all_1953_2018.dta,TRUE,31.21,2026-02-07 01:41:30
+MSC,generated cohort-year,../../../data/MSC/generated_years_lag.dta,TRUE,0.47,2026-02-07 01:31:54
+CEX,main processed,../../../data/CEX/CEX_1980_2012.dta,TRUE,146.89,2026-02-07 01:31:08
+CEX,generated cohort-quarter,../../../data/CEX/generated_quarters_lag.dta,TRUE,8.09,2026-02-07 01:31:26
+Nielsen,generated cohort-month,../../../data/Nielsen/generated_months_lag.dta,TRUE,63.87,2026-02-07 01:32:00
+Nielsen,panelist_totalexp_m,../../../data/Nielsen/panelist_totalexp_m.dta,FALSE,,
+Nielsen,panelist_storerank_m,../../../data/Nielsen/panelist_storerank_m.dta,FALSE,,
+Nielsen,panelist_goodrank_m,../../../data/Nielsen/panelist_goodrank_m.dta,FALSE,,
+Macro,quarterly unemployment,../../../raw/unemployment_raw_q.dta,TRUE,0.01,2026-02-07 01:41:38
+Macro,monthly unemployment,../../../raw/unemployment_raw_m.dta,TRUE,0.01,2026-02-07 01:41:38
+Macro,annual unemployment,../../../raw/nat_UE_1890_2017.dta,TRUE,0,2026-02-07 01:41:38
+Macro,price index,../../../raw/PCEPI.dta,TRUE,0,2026-02-07 01:41:36

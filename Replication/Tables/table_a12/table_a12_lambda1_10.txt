@@ -1,0 +1,11 @@
+Dependent: Log Consumption Value			
+	(1)	(2)	(3)
+VARIABLES	Total_wealth	Total_wealth	Total_wealth
+			
+L10_exp_personal	0.497***		0.494***
+	(0.077)		(0.077)
+L10_exp_state_nat		0.049	0.047
+		(0.030)	(0.031)
+			
+Observations	10,436	10,436	10,436
+R-squared	0.286	0.285	0.286

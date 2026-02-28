@@ -1,0 +1,23 @@
+{
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\begin{tabular}{l*{6}{c}}
+\hline\hline
+            &\multicolumn{1}{c}{(1)}&\multicolumn{1}{c}{(2)}&\multicolumn{1}{c}{(3)}&\multicolumn{1}{c}{(4)}&\multicolumn{1}{c}{(5)}&\multicolumn{1}{c}{(6)}\\
+            &\multicolumn{1}{c}{pexp\_dum}&\multicolumn{1}{c}{pexp\_dum}&\multicolumn{1}{c}{pexp\_dum}&\multicolumn{1}{c}{dur\_dum}&\multicolumn{1}{c}{dur\_dum}&\multicolumn{1}{c}{dur\_dum}\\
+\hline
+experience\_lambda1\_lag&      -0.017\sym{***}&      -0.015\sym{***}&      -0.014\sym{***}&      -0.063\sym{***}&      -0.054\sym{***}&      -0.050\sym{***}\\
+            &     (0.004)         &     (0.004)         &     (0.004)         &     (0.005)         &     (0.005)         &     (0.005)         \\
+[1em]
+UE\_rate     &      -0.016\sym{***}&      -0.016\sym{***}&      -0.016\sym{***}&      -0.045\sym{***}&      -0.046\sym{***}&      -0.046\sym{***}\\
+            &     (0.001)         &     (0.001)         &     (0.001)         &     (0.001)         &     (0.002)         &     (0.002)         \\
+[1em]
+ln\_income   &                     &       0.017\sym{***}&       0.018\sym{***}&                     &       0.050\sym{***}&       0.046\sym{***}\\
+            &                     &     (0.001)         &     (0.001)         &                     &     (0.001)         &     (0.001)         \\
+\hline
+\(N\)       &      253118         &      238174         &      236571         &      246433         &      232094         &      230547         \\
+\(R^{2}\)   &       0.044         &       0.045         &       0.045         &       0.052         &       0.060         &       0.063         \\
+\hline\hline
+\multicolumn{7}{l}{\footnotesize Standard errors in parentheses}\\
+\multicolumn{7}{l}{\footnotesize \sym{*} \(p<0.10\), \sym{**} \(p<0.05\), \sym{***} \(p<0.010\)}\\
+\end{tabular}
+}

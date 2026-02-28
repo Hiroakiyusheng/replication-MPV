@@ -1,0 +1,17 @@
+"",model 1,model 2,model 3,model 4,model 5,model 6,model 7,model 8,model 9,model 10
+Dependent Var.:,f2_income,f3_income,f4_income,f5_income,f6_income,f2_income,f3_income,f4_income,f5_income,f6_income
+ , , , , , , , , , , 
+exp_personal_lagged_1,0.032 (0.059),0.105 (0.072),0.098 (0.077),0.042 (0.086),0.060 (0.126),  ,  ,  ,  ,  
+exp_state_nat_lagged_1,-0.008 (0.013),-0.003 (0.014),0.001 (0.017),-0.004 (0.023),-0.004 (0.031),  ,  ,  ,  ,  
+exp_personal_nat_l3,  ,  ,  ,  ,  ,0.015 (0.034),0.058 (0.042),0.061 (0.045),0.021 (0.050),0.026 (0.073)
+exp_state_nat_lagged_l3,  ,  ,  ,  ,  ,-0.005 (0.007),-0.002 (0.008),-0.0003 (0.009),-0.002 (0.013),-0.0007 (0.018)
+Fixed-Effects:,--------------,--------------,-------------,--------------,--------------,--------------,--------------,---------------,--------------,---------------
+ID,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes
+age,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes
+GSA,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes
+year,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes,Yes
+_______________________,______________,______________,_____________,______________,______________,______________,______________,_______________,______________,_______________
+S.E.: Clustered,by: cohort,by: cohort,by: cohort,by: cohort,by: cohort,by: cohort,by: cohort,by: cohort,by: cohort,by: cohort
+Observations,"19,710","14,884","10,845","7,737","5,244","19,710","14,884","10,845","7,737","5,244"
+R2,0.79198,0.80505,0.81452,0.83135,0.85210,0.79198,0.80504,0.81453,0.83135,0.85210
+Within R2,0.00736,0.01355,0.01441,0.00694,0.01082,0.00735,0.01353,0.01445,0.00692,0.01078

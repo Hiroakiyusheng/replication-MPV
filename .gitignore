@@ -3,8 +3,6 @@
 # Large replication datasets and generated outputs
 Replication/raw/
 Replication/data/
-Replication/Figures/
-Replication/Tables/
 
 # Generated Quarto outputs
 Replication/code/R/book/_book/

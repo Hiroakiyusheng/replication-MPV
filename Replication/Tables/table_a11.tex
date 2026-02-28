@@ -1,0 +1,27 @@
+\documentclass[]{article}
+\setlength{\pdfpagewidth}{8.5in} \setlength{\pdfpageheight}{11in}
+\begin{document}
+\begin{tabular}{lcccccc}
+\multicolumn{7}{c}{Dependent: Log Consumption Value} \\ \hline
+ & (1) & (2) & (3) & (4) & (5) & (6) \\
+VARIABLES & Consumption\_All & Consumption\_All & Consumption\_All & Consumption\_All & Consumption\_All & Consumption\_All \\ \hline
+ &  &  &  &  &  &  \\
+exp\_personal\_lagged\_1 & -0.144 &  & -0.137 &  &  &  \\
+ & (0.132) &  & (0.132) &  &  &  \\
+pexp\_wealth & -0.002 &  & -0.002* & -0.121 &  & -0.122 \\
+ & (0.001) &  & (0.001) & (0.083) &  & (0.083) \\
+liquid\_wealth\_low & 0.020** & -0.022 & -0.031 & 0.013** & 0.016 & 0.012 \\
+ & (0.009) & (0.087) & (0.087) & (0.006) & (0.045) & (0.045) \\
+exp\_state\_nat\_lagged\_1 &  & -0.058*** & -0.059*** &  &  &  \\
+ &  & (0.020) & (0.020) &  &  &  \\
+mexp\_wealth &  & 0.005 & 0.008 &  & -0.002 & 0.000 \\
+ &  & (0.014) & (0.014) &  & (0.008) & (0.008) \\
+exp\_personal\_nat\_l3 &  &  &  & -0.103 &  & -0.099 \\
+ &  &  &  & (0.075) &  & (0.076) \\
+exp\_state\_nat\_lagged\_l3 &  &  &  &  & -0.032*** & -0.033*** \\
+ &  &  &  &  & (0.011) & (0.011) \\
+ &  &  &  &  &  &  \\
+Observations & 33,263 & 33,263 & 33,263 & 33,263 & 33,263 & 33,263 \\
+ R-squared & 0.771 & 0.771 & 0.771 & 0.771 & 0.771 & 0.771 \\ \hline
+\end{tabular}
+\end{document}

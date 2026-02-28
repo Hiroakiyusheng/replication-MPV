@@ -1,0 +1,16 @@
+Dependent: Log Consumption Value				
+	(1)	(2)	(3)	(4)
+VARIABLES	Consumption_All	Consumption_All	Consumption_All	Consumption_All
+				
+exp_personal_lagged_1	-0.275*	-0.275***		
+	(0.126)	(0.103)		
+exp_state_nat_lagged_1	-0.055***	-0.055***		
+	(0.015)	(0.018)		
+exp_personal_nat_l3			-0.169**	-0.169***
+			(0.073)	(0.059)
+exp_state_nat_lagged_l3			-0.033***	-0.033***
+			(0.009)	(0.010)
+				
+Observations	33,263	33,263	33,263	33,263
+R-squared	0.771	0.771	0.771	0.771
+Clustering Unit	Cohort&Year	HH	Cohort&Year	HH

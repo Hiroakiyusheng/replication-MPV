@@ -1,0 +1,7 @@
+source,main_file,used_in,note
+PSID,data/PSID/psid_new_final_lag_LS.dta,"Main Table 1, 2, 4, 5 + PSID Appendix",Table 1-2 の主データ
+MSC,raw/MSC/ms_all_1953_2018.dta,Main Table 3,Michigan Survey of Consumers
+CEX,data/CEX/CEX_1980_2012.dta,"Appendix A15, A16",Consumer Expenditure Survey
+Nielsen,data/Nielsen/panelist_*_m(.dta),"Appendix A13, A14, B17, B18, Figure B4",ローカルには一部生成ファイルのみ
+Macro controls,"raw/unemployment_*.dta, raw/PCEPI.dta",PSID/MSC/CEX/Nielsen controls,失業率・価格指数などの外生系列
+Model simulations,data/simulations/**/reg_data*.csv,"Main Table 7, C2",構造モデルのシミュレーション出力

@@ -1,0 +1,22 @@
+\documentclass[]{article}
+\setlength{\pdfpagewidth}{8.5in} \setlength{\pdfpageheight}{11in}
+\begin{document}
+\begin{tabular}{lcccc}
+\multicolumn{5}{c}{Dependent: Log Consumption Value} \\ \hline
+ & (1) & (2) & (3) & (4) \\
+VARIABLES & Consumption\_All & Consumption\_All & Consumption\_All & Consumption\_All \\ \hline
+ &  &  &  &  \\
+exp\_personal\_lagged\_1 & -0.275* & -0.275*** &  &  \\
+ & (0.126) & (0.103) &  &  \\
+exp\_state\_nat\_lagged\_1 & -0.055*** & -0.055*** &  &  \\
+ & (0.015) & (0.018) &  &  \\
+exp\_personal\_nat\_l3 &  &  & -0.169** & -0.169*** \\
+ &  &  & (0.073) & (0.059) \\
+exp\_state\_nat\_lagged\_l3 &  &  & -0.033*** & -0.033*** \\
+ &  &  & (0.009) & (0.010) \\
+ &  &  &  &  \\
+Observations & 33,263 & 33,263 & 33,263 & 33,263 \\
+R-squared & 0.771 & 0.771 & 0.771 & 0.771 \\
+ Clustering Unit & Cohort&Year & HH & Cohort&Year & HH \\ \hline
+\end{tabular}
+\end{document}

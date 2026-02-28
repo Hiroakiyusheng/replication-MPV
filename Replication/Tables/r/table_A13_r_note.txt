@@ -1,0 +1,1 @@
+Required Nielsen processed files are missing (panelist_totalexp_m / panelist_storerank_m / panelist_goodrank_m).

@@ -1,0 +1,15 @@
+Dependent: Log Consumption Value						
+	(1)	(2)	(3)	(4)	(5)	(6)
+VARIABLES	Consumption_All	Consumption_All	Consumption_All	Consumption_All	Consumption_All	Consumption_All
+						
+exp_personal_lagged_1	-0.485***		-0.368***			
+	(0.093)		(0.100)			
+exp_state_nat_lagged_1		-0.016	-0.012			
+		(0.017)	(0.018)			
+exp_personal_nat_l3				-0.258***		-0.274***
+				(0.051)		(0.053)
+exp_state_nat_lagged_l3					-0.022**	-0.017**
+					(0.010)	(0.009)
+						
+Observations	25,460	25,460	25,460	25,460	25,460	25,460
+Number of ID	6,066	6,066	6,066	6,066	6,066	6,066

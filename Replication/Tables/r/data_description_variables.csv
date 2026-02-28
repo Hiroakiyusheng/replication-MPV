@@ -1,0 +1,22 @@
+dataset,variable,label,missing_rate,mean,sd,status
+PSID,total,,0,10.317,0.828,ok
+PSID,income,,0,11.912,0.374,ok
+PSID,exp_personal_lagged_1,exp_personal_nat2,0,0.062,0.039,ok
+PSID,exp_state_nat_lagged_1,exp_state_nat_lagged_1,0,6.069,0.294,ok
+PSID,exp_personal_nat_l3,exp_personal_nat_l3,0,0.062,0.068,ok
+PSID,exp_state_nat_lagged_l3,exp_state_nat_lagged_l3,0,6.002,0.555,ok
+PSID,LIQUID_WEALTH,,0,53181.664,585161.441,ok
+PSID,ILLIQUID_WEALTH,,0,249996.979,1074170.424,ok
+PSID,FAM_NUM_TOTAL,,0,2.703,1.449,ok
+MSC,pexp,,0.04,2.554,1.324,ok
+MSC,dur,,0.077,2.068,1.696,ok
+MSC,income,,0.069,46198.067,55978.224,ok
+MSC,age,,0.008,47.09,17.567,ok
+MSC,bexp,,0.036,2.821,1.39,ok
+MSC,wt,,0.143,0.94,0.493,ok
+CEX,total_consumption,(sum) total_consumption,0,6042.522,6105.187,ok
+CEX,consumption_nondurables,(sum) consumption_nondurables,0,4112.946,3171.06,ok
+CEX,total_income,,0,43470.138,48711.918,ok
+CEX,hh_age,,0,50.985,16.901,ok
+CEX,family_size,,0,2.656,1.523,ok
+CEX,experience_lambda1_lag,,,,,variable_not_found

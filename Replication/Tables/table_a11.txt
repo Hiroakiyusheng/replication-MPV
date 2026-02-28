@@ -1,0 +1,21 @@
+Dependent: Log Consumption Value						
+	(1)	(2)	(3)	(4)	(5)	(6)
+VARIABLES	Consumption_All	Consumption_All	Consumption_All	Consumption_All	Consumption_All	Consumption_All
+						
+exp_personal_lagged_1	-0.144		-0.137			
+	(0.132)		(0.132)			
+pexp_wealth	-0.002		-0.002*	-0.121		-0.122
+	(0.001)		(0.001)	(0.083)		(0.083)
+liquid_wealth_low	0.020**	-0.022	-0.031	0.013**	0.016	0.012
+	(0.009)	(0.087)	(0.087)	(0.006)	(0.045)	(0.045)
+exp_state_nat_lagged_1		-0.058***	-0.059***			
+		(0.020)	(0.020)			
+mexp_wealth		0.005	0.008		-0.002	0.000
+		(0.014)	(0.014)		(0.008)	(0.008)
+exp_personal_nat_l3				-0.103		-0.099
+				(0.075)		(0.076)
+exp_state_nat_lagged_l3					-0.032***	-0.033***
+					(0.011)	(0.011)
+						
+Observations	33,263	33,263	33,263	33,263	33,263	33,263
+R-squared	0.771	0.771	0.771	0.771	0.771	0.771

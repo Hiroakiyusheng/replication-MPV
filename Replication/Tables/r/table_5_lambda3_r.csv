@@ -1,0 +1,15 @@
+"",model 1,model 2,model 3,model 4,model 5,model 6
+Dependent Var.:,f2_permanent_change,f2_square_change,f4_permanent_change,f4_square_change,f6_permanent_change,f6_square_change
+ , , , , , , 
+exp_personal_nat_l3,0.184 (0.289),0.117 (0.248),0.068 (0.214),-0.360 (0.307),0.209 (0.164),-0.627. (0.333)
+exp_state_nat_lagged_l3,0.022 (0.027),-0.011 (0.036),0.013 (0.025),0.007 (0.041),0.032 (0.027),-0.025 (0.046)
+Fixed-Effects:,-------------------,----------------,-------------------,----------------,-------------------,----------------
+age,Yes,Yes,Yes,Yes,Yes,Yes
+GSA,Yes,Yes,Yes,Yes,Yes,Yes
+year,Yes,Yes,Yes,Yes,Yes,Yes
+ID,Yes,Yes,Yes,Yes,Yes,Yes
+_______________________,___________________,________________,___________________,________________,___________________,________________
+S.E.: Clustered,by: cohort,by: cohort,by: cohort,by: cohort,by: cohort,by: cohort
+Observations,"17,672","24,127","17,672","24,127","18,170","24,804"
+R2,0.32978,0.44578,0.46275,0.75180,0.58779,0.79387
+Within R2,0.01117,0.02320,0.00257,0.00402,0.00356,0.00759

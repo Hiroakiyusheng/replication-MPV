@@ -1,0 +1,15 @@
+Dependent: Log Consumption Value								
+	(1)	(2)	(3)	(4)	(5)	(6)	(7)	(8)
+VARIABLES	Consumption_All	Consumption_All	Consumption_All	Consumption_All	Consumption_All	Consumption_All	Consumption_All	Consumption_All
+								
+exp_personal_lagged_1	-0.266**	-0.264**	-0.259**	-0.270**				
+	(0.128)	(0.115)	(0.114)	(0.113)				
+exp_state_nat_lagged_1	-0.053**	-0.055***	-0.054***	-0.053***				
+	(0.020)	(0.018)	(0.018)	(0.018)				
+exp_personal_nat_l3					-0.164**	-0.163**	-0.160**	-0.166**
+					(0.073)	(0.066)	(0.065)	(0.065)
+exp_state_nat_lagged_l3					-0.031***	-0.032***	-0.032***	-0.032***
+					(0.012)	(0.011)	(0.011)	(0.011)
+								
+Observations	33,263	33,263	33,263	33,263	33,263	33,263	33,263	33,263
+R-squared	0.771	0.771	0.771	0.771	0.771	0.771	0.771	0.771
